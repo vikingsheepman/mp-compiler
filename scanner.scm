@@ -21,7 +21,7 @@
 ;; To run this program from the terminal, issue the        ;;
 ;; command:                                                ;;
 ;;                                                         ;;
-;;     ./scanner.scm <filename>                            ;;   
+;;     ./scanner.scm <filename> > out.txt                  ;;   
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
@@ -148,8 +148,8 @@
                                             (else                           '"reject")))
               
          "unclosed"      '(lambda (x) (cond ((string=?      "}"         x)  '"mp-comment")
-                                            ((string=?      "\n"        x)  ((set! linum (+ linum 1))
-                                                                             '"unclosed"))
+                                            ((string=?      "\n"        x)  (set! linum (+ linum 1))
+                                                                            '"unclosed")
                                             (else                           '"unclosed")))
          
          "mp-comment"    '(lambda (x)                                       '"reject"))
@@ -182,6 +182,8 @@
    (hash "q0"                  '(lambda (x) (cond ((string=? x "'")        '"unclosed-str")
                                                   (else                    '"reject")))
          "unclosed-str"        '(lambda (x) (cond ((string=? x "'")        '"mp-string-lit")
+                                                  ((string=? x "\n")       (set! linum (+ linum 1))
+                                                                           '"unclosed-str")
                                                   (else                    '"unclosed-str")))
          "mp-string-lit"       '(lambda (x)                                '"reject"))
    '("mp-string-lit")))
@@ -193,7 +195,7 @@
    (hash "q0"          '(lambda (x) (cond ((string=? x ":")      '"mp-colon")
                                           (else                  '"reject")))
          "mp-colon"    '(lambda (x) (cond ((string=? x "=")      '"mp-assign")
-                                          (else                   '"reject")))
+                                         (else                   '"reject")))
          "mp-assign"   '(lambda (x)                              '"reject"))
    '("mp-colon" "mp-assign")))
 
@@ -304,35 +306,42 @@
 (define (get-next-token)
   (let ((next-char   (peek-char fp))
         (lexeme      '"")
-        (last-token  '"")
+        (last-token  '())
         (fp-offset   0))
     
     ;; step through a given DFA and return the resulting token-lexeme pair
     (define (run-dfa dfa current-state char)
       (let ((next-state    ((eval (hash-ref (car dfa) current-state)
                                   (make-base-namespace))
-                            char))
+                            (string char)))
             (final-states  (cadr dfa)))
 
-        (cond ((eq? next-state "reject")
+        (cond ((eof-object? char)
+               (cond ((eq? dfa mp-comment-dfa)     (list "mp-run-comment" "run on comment encountered"))
+                     ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string" "run on string encountered"))
+                     (else (printf "unexpected eof char\n"))))
+
+              ((eq? next-state "reject")
                (cond ((member current-state final-states)   (list current-state lexeme))
                      
                      (else                                  (file-position (- fp fp-offset))
-                                                             last-token)))
+                                                            (set! linum    (cadr last-token))
+                                                            (set! colnum   (caadr last-token))
+                                                            (car last-token))))
               
               (else
-               (cond ((member next-state final-states)      (set! last-token  lexeme)
+               (cond ((member next-state final-states)      (set! last-token  (list lexeme linum colnum))
                                                             (set! fp-offset   0)
-                                                            (set! lexeme      (string-append lexeme char))
+                                                            (set! lexeme      (string-append lexeme (string char)))
                                                             (set! colnum      (+ colnum 1))
                                                             (read-char fp)
-                                                            (run-dfa dfa next-state (string (peek-char fp))))
+                                                            (run-dfa dfa next-state (peek-char fp)))
                                                          
                      (else                                  (set! fp-offset   (+ fp-offset 1))
-                                                            (set! lexeme      (string-append lexeme char))
+                                                            (set! lexeme      (string-append lexeme (string char)))
                                                             (set! colnum      (+ colnum 1))
                                                             (read-char fp)
-                                                            (run-dfa dfa next-state (string (peek-char fp))))))
+                                                            (run-dfa dfa next-state (peek-char fp)))))
               ))) ;; end run-dfa
 
     
@@ -340,46 +349,46 @@
 
           ;; sort out identifiers and reservered words from each other
           ((regexp-match? #rx"[a-zA-Z]"  (string next-char))
-           (let ((id-found (run-dfa mp-letter-start-dfa '"q0" (string next-char))))
+           (let ((id-found (run-dfa mp-letter-start-dfa '"q0" next-char)))
              (cond ((string=? (car id-found) "word")
                     (list
                      (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
                      (cadr id-found)))
-                   ((string=? () "uscore")
+                   ((string=? (car id-found) "uscore")
                     (list "mp-identifier" (cadr id-found)))
                    (else id-found))))
           
-          ((regexp-match? #rx"[0-9]"     (string next-char))    (run-dfa mp-digit-start-dfa    '"q0" (string next-char)))
+          ((regexp-match? #rx"[0-9]"     (string next-char))    (run-dfa mp-digit-start-dfa    '"q0" next-char))
 
-          ((string=?      "'"            (string next-char))    (run-dfa mp-string-lit-dfa     '"q0" (string next-char)))
+          ((string=?      "'"            (string next-char))    (run-dfa mp-string-lit-dfa     '"q0" next-char))
 
-          ((string=?      "{"            (string next-char))    (run-dfa mp-comment-dfa        '"q0" (string next-char)))
+          ((string=?      "{"            (string next-char))    (run-dfa mp-comment-dfa        '"q0" next-char))
 
-          ((string=?      ":"            (string next-char))    (run-dfa mp-colon-start-dfa    '"q0" (string next-char)))
+          ((string=?      ":"            (string next-char))    (run-dfa mp-colon-start-dfa    '"q0" next-char))
 
-          ((string=?      ";"            (string next-char))    (run-dfa mp-scolon-dfa         '"q0" (string next-char)))
+          ((string=?      ";"            (string next-char))    (run-dfa mp-scolon-dfa         '"q0" next-char))
 
-          ((string=?      ","            (string next-char))    (run-dfa mp-comma-dfa          '"q0" (string next-char)))
+          ((string=?      ","            (string next-char))    (run-dfa mp-comma-dfa          '"q0" next-char))
 
-          ((string=?      "."            (string next-char))    (run-dfa mp-period-dfa         '"q0" (string next-char)))
+          ((string=?      "."            (string next-char))    (run-dfa mp-period-dfa         '"q0" next-char))
 
-          ((string=?      "="            (string next-char))    (run-dfa mp-equal-dfa          '"q0" (string next-char)))
+          ((string=?      "="            (string next-char))    (run-dfa mp-equal-dfa          '"q0" next-char))
 
-          ((string=?      ">"            (string next-char))    (run-dfa mp-greater-start-dfa  '"q0" (string next-char)))
+          ((string=?      ">"            (string next-char))    (run-dfa mp-greater-start-dfa  '"q0" next-char))
 
-          ((string=?      "<"            (string next-char))    (run-dfa mp-less-start-dfa     '"q0" (string next-char)))
+          ((string=?      "<"            (string next-char))    (run-dfa mp-less-start-dfa     '"q0" next-char))
 
-          ((string=?      "("            (string next-char))    (run-dfa mp-lparen-dfa         '"q0" (string next-char)))
+          ((string=?      "("            (string next-char))    (run-dfa mp-lparen-dfa         '"q0" next-char))
 
-          ((string=?      ")"            (string next-char))    (run-dfa mp-rparen-dfa         '"q0" (string next-char)))
+          ((string=?      ")"            (string next-char))    (run-dfa mp-rparen-dfa         '"q0" next-char))
 
-          ((string=?      "+"            (string next-char))    (run-dfa mp-plus-dfa           '"q0" (string next-char)))
+          ((string=?      "+"            (string next-char))    (run-dfa mp-plus-dfa           '"q0" next-char))
 
-          ((string=?      "-"            (string next-char))    (run-dfa mp-minus-dfa          '"q0" (string next-char)))
+          ((string=?      "-"            (string next-char))    (run-dfa mp-minus-dfa          '"q0" next-char))
 
-          ((string=?      "*"            (string next-char))    (run-dfa mp-times-dfa          '"q0" (string next-char)))
+          ((string=?      "*"            (string next-char))    (run-dfa mp-times-dfa          '"q0" next-char))
 
-          ((string=?      "/"            (string next-char))    (run-dfa mp-float-divide-dfa   '"q0" (string next-char)))
+          ((string=?      "/"            (string next-char))    (run-dfa mp-float-divide-dfa   '"q0" next-char))
           
           ((string=?      "\n"           (string next-char))    (set! linum (+ linum 1))
                                                                 (set! colnum 0)
@@ -409,9 +418,6 @@
                                                                  (string (read-char fp))
                                                                  ))))) ;; end get-next-token
 
-
-
-;; TODO  ==>  add the following tokens:  mp-run-comment, mp-run-string
 
 
 
