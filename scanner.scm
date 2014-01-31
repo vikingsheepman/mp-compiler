@@ -6,9 +6,9 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 1: Scanner                                        ;;
 ;;                                                         ;;
-;; Group Members:                                          ;;
-;;      Killian Smith                                      ;;
-;;      Joshua Kilpatrick                                  ;;
+;; Last Modified: 2014-01-30                               ;;
+;;                                                         ;;
+;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
@@ -47,22 +47,54 @@
 (printf "~%<-- Begin Scanning --> ~%~%")
 
 
-;;---------------------------------------------------------;;
-;;                                                         ;;
-;; ---- Global Variables ----                              ;;
-;;                                                         ;;
-;; linum      -> stores the current line number of the     ;;
-;;               pascal program that is being scanned      ;;
-;; colnum     -> stores the current column number of the   ;;
-;;               pascal program that is being scanned      ;;
-;; token-list -> list contains all found tokens            ;;
-;;                                                         ;;
-;;---------------------------------------------------------;;
+;;----------------------------------------------------------------;;
+;;                                                                ;;
+;; ---- Global Variables ----                                     ;;
+;;                                                                ;;
+;; linum            -> stores the current line number of the      ;;
+;;                     pascal program that is being scanned       ;;
+;; colnum           -> stores the current column number of the    ;;
+;;                     pascal program that is being scanned       ;;
+;; mp-keyword-table -> hash table that contains all of the micro  ;;
+;;                     pascal reservered words                    ;;
+;;                                                                ;;
+;;----------------------------------------------------------------;;
 
-(define linum 0)
+(define linum 1)
 (define colnum 0)
-(define token-list '())
 
+(define mp-keyword-table
+  (hash "and"        '"mp-and"
+        "begin"      '"mp-begin"
+        "Boolean"    '"mp-boolean"
+        "div"        '"mp-div"
+        "do"         '"mp-do"
+        "downto"     '"mp-downto"
+        "else"       '"mp-else"
+        "end"        '"mp-end"
+        "false"      '"mp-false"
+        "fixed"      '"mp-fixed"
+        "float"      '"mp-float"
+        "for"        '"mp-for"
+        "function"   '"mp-function"
+        "if"         '"mp-if"
+        "integer"    '"mp-integer"
+        "mod"        '"mp-mod"
+        "not"        '"mp-not"
+        "or"         '"mp-or"
+        "procedure"  '"mp-procedure"
+        "program"    '"mp-program"
+        "read"       '"mp-read"
+        "repeat"     '"mp-repeat"
+        "string"     '"mp-string"
+        "then"       '"mp-then"
+        "true"       '"mp-true"
+        "to"         '"mp-to"
+        "until"      '"mp-until"
+        "var"        '"mp-var"
+        "while"      '"mp-while"
+        "write"      '"mp-write"
+        "writeln"    '"mp-writeln"))
 
 
 ;;---------------------------------------------------------;;
@@ -80,33 +112,33 @@
 ;; DFA identifies add tokens that start with a digit
 (define mp-digit-start-dfa
   (list
-   (hash "q0"            '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-integer")
+   (hash "q0"            '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-integer-lit")
                                             (else                           '"reject")))
               
-         "mp-integer"    '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-integer")
+         "mp-integer-lit"    '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-integer-lit")
                                             ((string=?      "."         x)  '"digit-dot")
                                             ((regexp-match? #rx"e|E"    x)  '"e-char")
                                             ((regexp-match? #rx"\\+|-"  x)  '"signed-char")
                                             (else                           '"reject")))
               
-         "digit-dot"     '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-float")
+         "digit-dot"     '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-fixed-lit")
                                             (else                           '"reject")))
          
-         "mp-float"      '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-float")
+         "mp-fixed-lit"      '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-fixed-lit")
                                             ((regexp-match? #rx"e|E"    x)  '"e-char")
                                             ((regexp-match? #rx"\\+|-"  x)  '"signed-char")
                                             (else                           '"reject")))
          
-         "e-char"        '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-exponent")
+         "e-char"        '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-float-lit")
                                             (else                           '"reject")))
          
          "signed-char"   '(lambda (x) (cond ((regexp-match? #rx"e|E"    x)  '"e-char")
                                             (else                           '"reject")))
          
-         "mp-exponent"   '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-exponent")
+         "mp-float-lit"   '(lambda (x) (cond ((regexp-match? #rx"[0-9]"  x)  '"mp-float-lit")
                                             (else                           '"reject")))
          )
-   '("mp-integer" "mp-float" "mp-exponent")))
+   '("mp-integer-lit" "mp-fixed-lit" "mp-float-lit")))
 
 
 ;; DFA identifies micro-pascal comments, and keeps track of any newline characters
@@ -125,37 +157,6 @@
 
 
 ;; DFA identifies all tokens that begin with a letter
-;;   ->  needs to look up keywords this hashtable inside of
-;;       the get-next-token function
-(define mp-keyword-table
-  (hash "and"        '"mp-and"
-        "begin"      '"mp-begin"
-        "div"        '"mp-div"
-        "do"         '"mp-do"
-        "downto"     '"mp-downto"
-        "else"       '"mp-else"
-        "end"        '"mp-end"
-        "fixed"      '"mp-fixed"
-        "float"      '"mp-float"
-        "for"        '"mp-for"
-        "function"   '"mp-function"
-        "if"         '"mp-if"
-        "integer"    '"mp-integer"
-        "mod"        '"mp-mod"
-        "not"        '"mp-not"
-        "or"         '"mp-or"
-        "procedure"  '"mp-procedure"
-        "program"    '"mp-program"
-        "read"       '"mp-read"
-        "repeat"     '"mp-repeat"
-        "then"       '"mp-then"
-        "to"         '"mp-to"
-        "until"      '"mp-until"
-        "var"        '"mp-var"
-        "while"      '"mp-while"
-        "write"      '"mp-write"
-        ))
-
 (define mp-letter-start-dfa
   (list
    (hash "q0"              '(lambda (x) (cond ((regexp-match? #rx"[a-zA-Z]"     x)  '"word")
@@ -163,19 +164,129 @@
          
          "word"            '(lambda (x) (cond ((regexp-match? #rx"[a-zA-Z]"     x)  '"word")
                                               ((regexp-match? #rx"[0-9]"        x)  '"mp-identifier")
+                                              ((string=? "_"                    x)  '"uscore")
+                                              (else                                 '"reject")))
+
+         "uscore"          '(lambda (x) (cond ((regexp-match? #rx"[0-9a-zA-Z]"  x)  '"mp-identifier")
                                               (else                                 '"reject")))
          
          "mp-identifier"   '(lambda (x) (cond ((regexp-match? #rx"[0-9a-zA-Z]"  x)  '"mp-identifier")
+                                              ((string=? "_"                    x)  '"uscore")
                                               (else                                 '"reject"))))
-   '("word" "mp-identifier")))
+   '("word" "uscore" "mp-identifier")))
 
 
-;; TODO ==> Finish filling out all of mini-pascals token DFA's
-;;          Make sure all states and transitions are accounted
-;;          for when constructing a token dfa.
-;;      ==> Only special characters are left (like < > ( ) . , ; : + - * / ... etc),
-;;          as well as strings (inside single quotes)
-;;      ==> Entry points will need to be added below
+;; DFA identifies mp-string values
+(define mp-string-lit-dfa
+  (list
+   (hash "q0"                  '(lambda (x) (cond ((string=? x "'")        '"unclosed-str")
+                                                  (else                    '"reject")))
+         "unclosed-str"        '(lambda (x) (cond ((string=? x "'")        '"mp-string-lit")
+                                                  (else                    '"unclosed-str")))
+         "mp-string-lit"       '(lambda (x)                                '"reject"))
+   '("mp-string-lit")))
+
+
+;; remaining DFA's are single string tokens
+(define mp-colon-start-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x ":")      '"mp-colon")
+                                          (else                  '"reject")))
+         "mp-colon"    '(lambda (x) (cond ((string=? x "=")      '"mp-assign")
+                                          (else                   '"reject")))
+         "mp-assign"   '(lambda (x)                              '"reject"))
+   '("mp-colon" "mp-assign")))
+
+(define mp-comma-dfa
+  (list
+   (hash "q0"         '(lambda (x) (cond ((string=? x ",")     '"mp-comma")
+                                         (else                 '"reject")))
+         "mp-comma"   '(lambda (x)                             '"reject"))
+   '("mp-comma")))
+
+(define mp-equal-dfa
+  (list
+   (hash "q0"         '(lambda (x) (cond ((string=? x "=")     '"mp-equal")
+                                         (else                 '"reject")))
+         "mp-equal"   '(lambda (x)                             '"reject"))
+   '("mp-equal")))
+
+(define mp-float-divide-dfa
+  (list
+   (hash "q0"                '(lambda (x) (cond ((string=? x "/")     '"mp-float-divide")
+                                                (else                 '"reject")))
+         "mp-float-divide"   '(lambda (x)                             '"reject"))
+   '("mp-float-divide")))
+
+(define mp-greater-start-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x ">")      '"mp-gthan")
+                                          (else                  '"reject")))
+         "mp-gthan"    '(lambda (x) (cond ((string=? x "=")      '"mp-gequal")
+                                          (else                  '"reject")))
+         "mp-gequal"   '(lambda (x)                              '"reject"))
+   '("mp-gthan" "mp-gequal")))
+
+(define mp-less-start-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x "<")     '"mp-lthan")
+                                          (else                 '"reject")))
+         "mp-lthan"    '(lambda (x) (cond ((string=? x "=")     '"mp-lequal")
+                                          ((string=? x ">")     '"mp-nequal")
+                                          (else                 '"reject")))
+         "mp-lequal"   '(lambda (x)                             '"reject")
+         "mp-nequal"   '(lambda (x)                             '"reject"))
+   '("mp-lthan" "mp-lequal" "mp-nequal")))
+
+(define mp-lparen-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x "(")     '"mp-lparen")
+                                          (else                 '"reject")))
+         "mp-lparen"   '(lambda (x)                             '"reject"))
+   '("mp-lparen")))
+
+(define mp-rparen-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x ")")     '"mp-rparen")
+                                          (else                 '"reject")))
+         "mp-rparen"   '(lambda (x)                             '"reject"))
+   '("mp-rparen")))
+
+(define mp-minus-dfa
+  (list
+   (hash "q0"         '(lambda (x) (cond ((string=? x "-")     '"mp-minus")
+                                         (else                 '"reject")))
+         "mp-minus"   '(lambda (x)                             '"reject"))
+   '("mp-minus")))
+
+(define mp-plus-dfa
+  (list
+   (hash "q0"        '(lambda (x) (cond ((string=? x "+")     '"mp-plus")
+                                        (else                 '"reject")))
+         "mp-plus"   '(lambda (x)                             '"reject"))
+   '("mp-plus")))
+
+
+(define mp-times-dfa
+  (list
+   (hash "q0"         '(lambda (x) (cond ((string=? x "*")    '"mp-times")
+                                         (else                '"reject")))
+         "mp-times"   '(lambda (x)                            '"reject"))
+   '("mp-times")))
+
+(define mp-period-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x ".")   '"mp-period")
+                                          (else               '"reject")))
+         "mp-period"   '(lambda (x)                           '"reject"))
+   '("mp-period")))
+
+(define mp-scolon-dfa
+  (list
+   (hash "q0"          '(lambda (x) (cond ((string=? x ";")   '"mp-scolon")
+                                          (else               '"reject")))
+         "mp-scolon"   '(lambda (x)                           '"reject"))
+   '("mp-scolon")))
 
 
 
@@ -225,25 +336,50 @@
               ))) ;; end run-dfa
 
     
-    (cond ((eof-object? next-char) '"EOF")
-          
+    (cond ((eof-object? next-char) (list "mp-eof" "<eof>"))
+
+          ;; sort out identifiers and reservered words from each other
           ((regexp-match? #rx"[a-zA-Z]"  (string next-char))
            (let ((id-found (run-dfa mp-letter-start-dfa '"q0" (string next-char))))
              (cond ((string=? (car id-found) "word")
                     (list
                      (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
                      (cadr id-found)))
+                   ((string=? () "uscore")
+                    (list "mp-identifier" (cadr id-found)))
                    (else id-found))))
           
-          ((regexp-match? #rx"[0-9]"     (string next-char))    (run-dfa mp-digit-start-dfa   '"q0" (string next-char)))
+          ((regexp-match? #rx"[0-9]"     (string next-char))    (run-dfa mp-digit-start-dfa    '"q0" (string next-char)))
 
-          ((string=?      "{"            (string next-char))    (run-dfa mp-comment-dfa       '"q0" (string next-char)))
+          ((string=?      "'"            (string next-char))    (run-dfa mp-string-lit-dfa     '"q0" (string next-char)))
 
+          ((string=?      "{"            (string next-char))    (run-dfa mp-comment-dfa        '"q0" (string next-char)))
 
+          ((string=?      ":"            (string next-char))    (run-dfa mp-colon-start-dfa    '"q0" (string next-char)))
 
-          ;; TODO ==>  finish putting other starting character DFA entry points here
-          
-          
+          ((string=?      ";"            (string next-char))    (run-dfa mp-scolon-dfa         '"q0" (string next-char)))
+
+          ((string=?      ","            (string next-char))    (run-dfa mp-comma-dfa          '"q0" (string next-char)))
+
+          ((string=?      "."            (string next-char))    (run-dfa mp-period-dfa         '"q0" (string next-char)))
+
+          ((string=?      "="            (string next-char))    (run-dfa mp-equal-dfa          '"q0" (string next-char)))
+
+          ((string=?      ">"            (string next-char))    (run-dfa mp-greater-start-dfa  '"q0" (string next-char)))
+
+          ((string=?      "<"            (string next-char))    (run-dfa mp-less-start-dfa     '"q0" (string next-char)))
+
+          ((string=?      "("            (string next-char))    (run-dfa mp-lparen-dfa         '"q0" (string next-char)))
+
+          ((string=?      ")"            (string next-char))    (run-dfa mp-rparen-dfa         '"q0" (string next-char)))
+
+          ((string=?      "+"            (string next-char))    (run-dfa mp-plus-dfa           '"q0" (string next-char)))
+
+          ((string=?      "-"            (string next-char))    (run-dfa mp-minus-dfa          '"q0" (string next-char)))
+
+          ((string=?      "*"            (string next-char))    (run-dfa mp-times-dfa          '"q0" (string next-char)))
+
+          ((string=?      "/"            (string next-char))    (run-dfa mp-float-divide-dfa   '"q0" (string next-char)))
           
           ((string=?      "\n"           (string next-char))    (set! linum (+ linum 1))
                                                                 (set! colnum 0)
@@ -263,32 +399,38 @@
                                                                 '())
           
           (else                                                 (list
+                                                                 "mp-error"
                                                                  (string-append
-                                                                  '"  ->  unreconized start of token at ["
+                                                                  '"["
                                                                   (number->string linum)
                                                                   ":"
                                                                   (number->string colnum)
-                                                                  "] :: \""
-                                                                  (string (read-char fp))
-                                                                  "\" ")))))) ;; end get-next-token
+                                                                  "]")
+                                                                 (string (read-char fp))
+                                                                 ))))) ;; end get-next-token
+
+
+
+;; TODO  ==>  add the following tokens:  mp-run-comment, mp-run-string
 
 
 
 ;; test the functionality of the scanner
-(define (get-token-list)
+(define (print-token-list)
   (let ((token (get-next-token)))
-    (cond ((eq? token "EOF") (printf "\n<EOF>\n")
-                             '"")
-          (else (cond ((not (eq? token '())) (append token token-list)
-                                             (printf "~a~%" token)))
-                (get-token-list)))))
+    (cond ((eq? token '())             (print-token-list))
+          
+          ((eq? (car token) "mp-eof")  (printf "~a~%" token))
+          
+          (else                        (printf "~a~%" token)
+                                       (print-token-list)))))
 
-(printf "~a~%" (get-token-list))
+(print-token-list)
 
 
 
 ;; - flag for logging - finished executing scanner
-(printf "~%~%<-- Finished Scanning -->~%~%")
+(printf "~%<-- Finished Scanning -->~%~%")
 
 
 ;;---------------------------------------------------------;;
