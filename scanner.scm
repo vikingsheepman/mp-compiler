@@ -148,8 +148,6 @@
                                             (else                           '"reject")))
               
          "unclosed"      '(lambda (x) (cond ((string=?      "}"         x)  '"mp-comment")
-                                            ((string=?      "\n"        x)  (set! linum (+ linum 1))
-                                                                            '"unclosed")
                                             (else                           '"unclosed")))
          
          "mp-comment"    '(lambda (x)                                       '"reject"))
@@ -182,8 +180,6 @@
    (hash "q0"                  '(lambda (x) (cond ((string=? x "'")        '"unclosed-str")
                                                   (else                    '"reject")))
          "unclosed-str"        '(lambda (x) (cond ((string=? x "'")        '"mp-string-lit")
-                                                  ((string=? x "\n")       (set! linum (+ linum 1))
-                                                                           '"unclosed-str")
                                                   (else                    '"unclosed-str")))
          "mp-string-lit"       '(lambda (x)                                '"reject"))
    '("mp-string-lit")))
@@ -316,10 +312,12 @@
                             (string char)))
             (final-states  (cadr dfa)))
 
+        (cond ((eq? char #\newline) (set! linum (+ linum 1))))
+        
         (cond ((eof-object? char)
                (cond ((eq? dfa mp-comment-dfa)     (list "mp-run-comment" "run on comment encountered"))
                      ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string" "run on string encountered"))
-                     (else (printf "unexpected eof char\n"))))
+                     (else                         (printf "unexpected eof char\n"))))
 
               ((eq? next-state "reject")
                (cond ((member current-state final-states)   (list current-state lexeme))
