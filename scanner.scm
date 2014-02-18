@@ -1,4 +1,3 @@
-
 #! /usr/bin/env guile
 !#
 
@@ -7,7 +6,7 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 1: Scanner                                        ;;
 ;;                                                         ;;
-;; Last Modified: 2014-02-06                               ;;
+;; Last Modified: 2014-02-15                               ;;
 ;;                                                         ;;
 ;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
@@ -19,39 +18,14 @@
 ;; of deterministic finite automaton for single pass       ;;
 ;; pattern matching.                                       ;;
 ;;                                                         ;;
-;; To run this program from the terminal, issue the        ;;
-;; command:                                                ;;
-;;                                                         ;;
-;;     ./scanner.scm <filename> > out.txt                  ;;   
+;; This program servers as a utility file for the          ;;
+;; micro-pascal parser, and is not a stand alone           ;;
+;; progam.                                                 ;;
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
-
-
-;;---------------------------------------------------------;;
-;;                                                         ;;
-;; ---- Libraries and Load Files ----                      ;;
-;;                                                         ;;
-;;---------------------------------------------------------;;
 
 (use-modules (ice-9 regex))
-
-
-
-;;---------------------------------------------------------;;
-;;                                                         ;;
-;; ---- Command Line Arguments ----                        ;;
-;;                                                         ;;
-;; Accepts the pascal filename as only argument            ;;
-;;                                                         ;;
-;;---------------------------------------------------------;;
-
-(define infile
-  (cadr (command-line)))
-
-;; open and name the file pointer
-(define fp (open-input-file infile))
-
 
 
 ;;----------------------------------------------------------------;;
@@ -94,7 +68,6 @@
 (define minus-transitions (make-hash-table 5))
 (define times-transitions (make-hash-table 5))
 (define float-divide-transitions (make-hash-table 5))
-
 
 
 
@@ -153,12 +126,9 @@
   (define comment-transitions-list
     (list
       '("q0" '(lambda (x) (cond ((string=? "{" x) '"unclosed")
-                                (else '"reject"))))              
+                                (else '"reject"))))
       '("unclosed" '(lambda (x) (cond ((string=? "}" x) '"mp-comment")
-                                      ((string=? "\n")  (set! linum (+ linum 1))
-                                                        (set! colnum (+ colnum 1))
-                                                        '"unclosed")
-                                      (else '"unclosed"))))         
+                                      (else '"unclosed"))))
       '("mp-comment" '(lambda (x) '"reject"))))
 
   (define string-transitions-list
@@ -166,9 +136,6 @@
      '("q0" '(lambda (x) (cond ((string=? x "'") '"unclosed-str")
                                (else '"reject"))))    
      '("unclosed-str" '(lambda (x) (cond ((string=? x "'")  '"apos")
-                                          ((string=? "\n")  (set! linum (+ linum 1))
-                                                            (set! colnum (+ colnum 1))
-                                                            '"unclosed-str")
                                           (else '"unclosed-str"))))
      '("apos" '(lambda (x) (cond ((string=? x "'") '"unclosed-str")
                                  (else '"mp-string-lit"))))
@@ -218,9 +185,9 @@
     (list
      '("q0" '(lambda (x) (cond ((string=? x "<") '"mp-lthan")
                                           (else '"reject"))))
-     '("mp-lthan" '(lambda (x) (cond ((string=? x "=") '"mp-lequal"))
-                           ((string=? x ">") '"mp-nequal")
-                           (else '"reject")))
+     '("mp-lthan" '(lambda (x) (cond ((string=? x "=") '"mp-lequal")
+                                     ((string=? x ">") '"mp-nequal")
+                                     (else '"reject"))))
      '("mp-lequal" '(lambda (x) '"reject"))
      '("mp-nequal" '(lambda (x) '"reject"))))
 
@@ -284,6 +251,7 @@
      '("procedure"  "mp-procedure")
      '("program"    "mp-program")
      '("read"       "mp-read")
+     '("readln"     "mp-readln")
      '("repeat"     "mp-repeat")
      '("string"     "mp-string")
      '("then"       "mp-then")
@@ -315,8 +283,7 @@
   (fill-hash-table float-divide-transitions float-divide-transitions-list)
 
   ;; fill reserved words table
-  (fill-hash-table mp-keyword-table reserved-words-list)
-  )
+  (fill-hash-table mp-keyword-table reserved-words-list))
 
 
 
@@ -421,7 +388,7 @@
 
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
-;; ---- Driver function for Scanner ----                   ;;
+;; ---- Main function for Scanner ----                     ;;
 ;;                                                         ;;
 ;; Function attempts to find and return the next token     ;;
 ;; of a given micro-pascal program. If the function fails, ;;
@@ -438,7 +405,6 @@
     
     ;; step through a given DFA and return the resulting token-lexeme pair
     (define (run-dfa dfa current-state char)
-      
       (cond
        ((eof-object? char)
         (cond ((eq? dfa mp-comment-dfa)     (list "mp-run-comment" "run-on-comment" linum colnum))
@@ -448,12 +414,14 @@
           (let ((next-state ((eval transition (current-module)) (string char)))
                 (final-states (cadr dfa)))
 
+           ; (cond ((string=? (string char) "\n") (set! linum (+ linum 1))))
+            
             (cond ((string=? next-state "reject")
                    (cond ((member current-state final-states)    (list current-state lexeme linum colnum))
                    
                          (else                                   (file-position (- fp fp-offset))
-                                                                 (set! linum    (caadr last-token))
-                                                                 (set! colnum   (caaadr last-token))
+                                                                 (set! linum    (caddr last-token))
+                                                                 (set! colnum   (cadddr last-token))
                                                                  (last-token))))
               
                   (else
@@ -480,9 +448,9 @@
         (cond ((string=? (car id-found) "word")
                (list
                 (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
-                (cadr id-found)))
+                (cadr id-found) (caddr id-found) (cadddr id-found)))
               ((string=? (car id-found) "uscore")
-               (list "mp-identifier" (cadr id-found)))
+               (list "mp-identifier" (cadr id-found) (caddr id-found) (cadddr id-found)))
               (else id-found))))
           
      ((string-match  "[0-9]"  (string next-char))    (run-dfa mp-digit-start-dfa    "q0" next-char))
@@ -526,7 +494,7 @@
                                                      (read-char fp)
                                                      '())
      
-     ((string=?      "\t"     (string next-char))    (set! colnum (+ colnum 4))
+     ((string=?      "\t"     (string next-char))    (set! colnum (+ colnum 1))
                                                      (read-char fp)
                                                      '())
      
@@ -543,31 +511,14 @@
 
 
 
-
-;; - flag for logging - begin scanner execution
-(format #t "~%<-- Begin Scanning --> ~%~%")
-
-
-;; test the functionality of the scanner
-(init-transition-tables)
-
-;; generate token list
-(define (print-token-list)
+(define (get-token)
   (let ((token (get-next-token)))
-    (cond ((eq? token '())                  (print-token-list))
-          
-          ((string=? (car token) "mp-eof")  (format #t "~a~%" token))
-          
-          (else                             (format #t "~a~%" token)
-                                            (print-token-list)))))
+    (cond ((or (eq? token '())
+               (string=? (car token) "mp-comment"))
+           (get-token))
+          (else (format #t "  read -> ~a~%" token)
+                token))))
 
-
-(print-token-list)
-
-
-
-;; - flag for logging - finished executing scanner
-(format #t "~%<-- Finished Scanning -->~%~%")
 
 
 ;;---------------------------------------------------------;;
