@@ -71,6 +71,7 @@
 
 
 
+
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
 ;; ---- Helper Functions ----                              ;;
@@ -138,7 +139,7 @@
      '("unclosed-str" '(lambda (x) (cond ((string=? x "'")  '"apos")
                                           (else '"unclosed-str"))))
      '("apos" '(lambda (x) (cond ((string=? x "'") '"unclosed-str")
-                                 (else '"mp-string-lit"))))
+                                 (else (unread-string x fp) '"mp-string-lit"))))
      '("mp-string-lit" '(lambda (x) '"reject"))))
 
   (define colon-start-transitions-list
@@ -283,7 +284,8 @@
   (fill-hash-table float-divide-transitions float-divide-transitions-list)
 
   ;; fill reserved words table
-  (fill-hash-table mp-keyword-table reserved-words-list))
+  (fill-hash-table mp-keyword-table reserved-words-list)
+  )
 
 
 
@@ -408,7 +410,8 @@
       (cond
        ((eof-object? char)
         (cond ((eq? dfa mp-comment-dfa)     (list "mp-run-comment" "run-on-comment" linum colnum))
-              ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string" "run-on-string" linum colnum))))
+              ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string" "run-on-string" linum colnum))
+              ((eq? dfa mp-period-dfa)      (list current-state lexeme linum colnum))))
        (else
         (let ((transition (eval (hash-ref (car dfa) current-state) (current-module))))
           (let ((next-state ((eval transition (current-module)) (string char)))
@@ -511,14 +514,39 @@
 
 
 
+;;---------------------------------------------------------;;
+;;                                                         ;;
+;; ---- Provided Functions ----                            ;;
+;;                                                         ;;
+;; The following functions provide a set of operations     ;;
+;; that can be utilized by the parser.                     ;;
+;;                                                         ;;
+;;---------------------------------------------------------;;
+
+(define (undo str)
+  (cond ((eq? str '()) '())
+        (else
+         (cond ((eq? colnum 0) (set! linum (- linum 1)))
+               (else (set! colnum (- colnum 1))))
+         (unread-char (car str) fp)
+         (undo (cdr str)))))
+
 (define (get-token)
   (let ((token (get-next-token)))
     (cond ((or (eq? token '())
                (string=? (car token) "mp-comment"))
            (get-token))
-          (else (format #t "  read -> ~a~%" token)
-                token))))
+          (else token))))
 
+(define (backtrack-token token)
+  (let ((reversed (string->list (string-reverse (cadr token)))))
+    (undo reversed)))
+
+(define (peek-token)
+  (let ((token (get-token)))
+    (let ((reversed (string->list (string-reverse (cadr token)))))
+      (undo reversed))
+    token))
 
 
 ;;---------------------------------------------------------;;
