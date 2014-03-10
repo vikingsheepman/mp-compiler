@@ -24,8 +24,10 @@
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
+(define-module (scanner)
+  #:use-module (ice-9 regex)
+  #:export (init-scanner get-token peek-token backtrack-token))
 
-(use-modules (ice-9 regex))
 
 
 ;;----------------------------------------------------------------;;
@@ -42,6 +44,9 @@
 ;;                     transitions                                ;;
 ;;                                                                ;;
 ;;----------------------------------------------------------------;;
+
+;; define the source file pointer (initialized to 0)
+(define fp 0)
 
 ;; line and column numbers
 (define linum 1)
@@ -74,10 +79,9 @@
 
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
-;; ---- Helper Functions ----                              ;;
+;; ---- Scanner Utility Functions ----                     ;;
 ;;                                                         ;;
-;; Functions are used to help preform indirect operations  ;;
-;; needed for scanner function.                            ;;
+;; fill-hash-table ->                                      ;;
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
@@ -86,6 +90,17 @@
   (define (fill-row pair)
     (hash-set! table (car pair) (cadr pair)))
   (map fill-row list))
+
+
+
+;;----------------------------------------------------------;;
+;;                                                          ;;
+;; ---- Token DFA Transition Functions ----                 ;;
+;;                                                          ;;
+;; These functions represent the state transitions that     ;;
+;; are made depending on state machine input.               ;;
+;;                                                          ;;
+;;----------------------------------------------------------;;
 
 ;; initialize dfa transition tables
 (define (init-transition-tables)
@@ -284,8 +299,8 @@
   (fill-hash-table float-divide-transitions float-divide-transitions-list)
 
   ;; fill reserved words table
-  (fill-hash-table mp-keyword-table reserved-words-list)
-  )
+  (fill-hash-table mp-keyword-table reserved-words-list))
+
 
 
 
@@ -388,17 +403,23 @@
 
 
 
-;;---------------------------------------------------------;;
-;;                                                         ;;
-;; ---- Main function for Scanner ----                     ;;
-;;                                                         ;;
-;; Function attempts to find and return the next token     ;;
-;; of a given micro-pascal program. If the function fails, ;;
-;; then the program returns an error message that details  ;;
-;; the line and column number where it failed              ;;
-;;                                                         ;;
-;;---------------------------------------------------------;;
 
+;;-------------------------------------------------------------;;
+;;                                                             ;;
+;; ---- Main utility functions for Scanner ----                ;;
+;;                                                             ;;
+;; get-next-token ->                                           ;;
+;;     Function attempts to find and return the next token     ;;
+;;     of a given micro-pascal program. If the function fails, ;;
+;;     then the program returns an error message that details  ;;
+;;     the line and column number where it failed              ;;
+;;                                                             ;;
+;; undo -> revert file pointer to the begining of the given    ;;
+;;         tokens lexeme                                       ;;
+;;                                                             ;;
+;;-------------------------------------------------------------;;
+
+;; find and return the next found token
 (define (get-next-token)
   (let ((next-char   (peek-char fp))
         (lexeme      '"")
@@ -512,17 +533,7 @@
                                                       (number->string colnum)))
      ))) ;; end get-next-token
 
-
-
-;;---------------------------------------------------------;;
-;;                                                         ;;
-;; ---- Provided Functions ----                            ;;
-;;                                                         ;;
-;; The following functions provide a set of operations     ;;
-;; that can be utilized by the parser.                     ;;
-;;                                                         ;;
-;;---------------------------------------------------------;;
-
+;; undo a read string
 (define (undo str)
   (cond ((eq? str '()) '())
         (else
@@ -531,6 +542,30 @@
          (unread-char (car str) fp)
          (undo (cdr str)))))
 
+
+
+
+;;---------------------------------------------------------;;
+;;                                                         ;;
+;; ---- Provided Functions ----                            ;;
+;;                                                         ;;
+;; The following functions are provided by this file. To   ;;
+;; use them be sure to add:                                ;;
+;;                                                         ;;
+;;     (use-modules (ice-9 regex) (scanner))               ;;
+;;                                                         ;;
+;; To the top of the file that the scanner is used in.     ;;
+;;                                                         ;;
+;;---------------------------------------------------------;;
+
+;; initialize scanner -- must be called before any other
+;;                       function that is provided by
+;;                       this scanner file.
+(define (init-scanner)
+  (set! fp (open-input-file (cadr (command-line))))
+  (init-transition-tables))
+
+;; return next non-empty token
 (define (get-token)
   (let ((token (get-next-token)))
     (cond ((or (eq? token '())
@@ -538,15 +573,18 @@
            (get-token))
           (else token))))
 
+;; backtrack a single token
 (define (backtrack-token token)
   (let ((reversed (string->list (string-reverse (cadr token)))))
     (undo reversed)))
 
+;; peek at the next token, but do not read
 (define (peek-token)
   (let ((token (get-token)))
     (let ((reversed (string->list (string-reverse (cadr token)))))
       (undo reversed))
     token))
+
 
 
 ;;---------------------------------------------------------;;
