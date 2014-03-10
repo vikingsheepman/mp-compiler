@@ -6,7 +6,7 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 2: Parser                                         ;;
 ;;                                                         ;;
-;; Last Modified: 2014-02-18                               ;;
+;; Last Modified: 2014-03-05                               ;;
 ;;                                                         ;;
 ;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
@@ -26,9 +26,9 @@
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
-
-(load "scanner.scm")
-(define fp (open-input-file (cadr (command-line))))
+;; load modules
+(add-to-load-path ".")
+(use-modules (ice-9 regex) (scanner) (symbol-table))
 
 
 
@@ -36,19 +36,70 @@
 ;;                                                         ;;
 ;; -- Helper Functions --                                  ;;
 ;;                                                         ;;
-;; expect-token :                                          ;;
+;; token-error ->                                          ;;
+;;     Prints an error message to the user displaying what ;;
+;;     the grammar expected and what was recieved.         ;;
+;;     Additionally, the line and column numbers of the    ;;
+;;     end of the lexeme are displayed.                    ;;
+;;                                                         ;;
+;; expect-token ->                                         ;;
 ;;     Function returns an error message if the expected   ;;
 ;;     token is not encountered.                           ;;
 ;;                                                         ;;
+;; eps -> Synonym for epsilon (empty string)               ;;
+;;                                                         ;;
+;; intro-msg -> Displays initial compiler info screen.     ;;
+;;                                                         ;;
 ;;---------------------------------------------------------;;
 
+;; define what to do when an error occurs
+(define (token-error expected recieved)
+  (format #t "~%parse error: expected ~a but found ~a at [~a:~a]~%~%"
+          expected (car recieved) (caddr recieved) (cadddr recieved)))
 
 ;; preform desired function if expected token is found
 (define (expect-token expected token)
   (cond ((string=? (car token) expected) '())
-        (else (format #t "~%parse error: expected ~a but found ~a at [~a:~a]~%~%"
-                      expected (car token) (caddr token) (cadddr token))
+        (else (token-error expected token)
               (exit))))
+
+;; epsilon definition
+(define eps "")
+
+;; welcome mesage
+(define (intro-msg)
+  (format #t "~%~%")
+  (format #t "              ____________________________________________________~%")
+  (format #t "             /                                                    \\~%")
+  (format #t "            |    _____________________________________________     |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |  # Welcome to the Micro Pascal Compiler!    |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |  # Author: Killian Smith                    |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |  # Usage: ./parser <pascal-source-file>     |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |  # Enjoy! _                                 |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |                                             |    |~%")
+  (format #t "            |   |_____________________________________________|    |~%")
+  (format #t "            |                                                      |~%")
+  (format #t "            \\_____________________________________________________/~%")
+  (format #t "                   \\_______________________________________/~%")
+  (format #t "              _______________________________________________~%")
+  (format #t "           _ -'    .-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.  --- `-_~%")
+  (format #t "          -'.-.-. .---.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.--.  .-.-.`-_~%")
+  (format #t "      _ -'.-.-.-. .---.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-`__`. .-.-.-.`-_~%")
+  (format #t "    _-'.-.-.-.-. .-----.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-----. .-.-.-.-.`-_~%")
+  (format #t "  _-'.-.-.-.-.-. .---.-. .-----------------------------. .-.---. .---.-.-.-.`-_~%")
+  (format #t " :-----------------------------------------------------------------------------:~%")
+  (format #t " `---._.-----------------------------------------------------------------._.---'~%~%")
+ 
+  (format #t ""))
+
 
 
 ;;---------------------------------------------------------;;
@@ -64,19 +115,19 @@
 ;; <system-goal> -> <program> . EOF
 (define (system-goal)
   (program)
-  (expect-token '"mp-eof" (get-token))
-  (format #t "program succesfully parsed~%"))
+  (expect-token "mp-eof" (get-token))
+  (format #t "The program has parsed successfully!~%~%"))
 
 ;; <program> -> <program-heading> . mp-scolon . <block> . mp-period
 (define (program)
   (program-heading)
-  (expect-token '"mp-scolon" (get-token))
+  (expect-token "mp-scolon" (get-token))
   (block)
-  (expect-token '"mp-period" (get-token)))
+  (expect-token "mp-period" (get-token)))
 
 ;; <program-heading> -> mp-program . <program-identifier>
 (define (program-heading)
-  (expect-token '"mp-program" (get-token))
+  (expect-token "mp-program" (get-token))
   (program-identifier))
 
 ;; <block> -> <variable-declaration-part> . <procedure-and-function-declaration-part>
@@ -93,9 +144,9 @@
   (cond ((string=? (car (peek-token)) "mp-var")
          (get-token)
          (variable-declaration)
-         (expect-token '"mp-scolon" (get-token))
+         (expect-token "mp-scolon" (get-token))
          (variable-declaration-tail))
-        (else '"")))
+        (else eps)))
 
 ;; <variable-declaration-tail> -> <variable-declaration> . mp-scolon
 ;;                                . <variable-declaration-tail>
@@ -104,14 +155,14 @@
   (cond ((string=? (car (peek-token)) "mp-identifier")
          (get-token)
          (variable-declaration)
-         (expect-token '"mp-scolon" (get-token))
+         (expect-token "mp-scolon" (get-token))
          (variable-declaration-tail))
-        (else '"")))
+        (else eps)))
 
 ;; <variable-declaration> -> <identifier-list> . mp-colon . <type>
 (define (variable-declaration)
   (identifier-list)
-  (expect-token '"mp-colon" (get-token))
+  (expect-token "mp-colon" (get-token))
   (type))
 
 ;; <type> -> mp-integer
@@ -120,12 +171,11 @@
 ;;        -> mp-boolean
 (define (type)
   (let ((next-token (peek-token)))
-    (cond ((string=? (car next-token) "mp-integer") (get-token) '())
-          ((string=? (car next-token) "mp-float") (get-token) '())
-          ((string=? (car next-token) "mp-string") (get-token) '())
-          ((string=? (car next-token) "mp-boolean") (get-token) '())
-          (else (format #t "~%parse error: expected a type but found ~a at [~a:~a]~%~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+    (cond ((string=? (car next-token) "mp-integer") (get-token) eps)
+          ((string=? (car next-token) "mp-float") (get-token) eps)
+          ((string=? (car next-token) "mp-string") (get-token) eps)
+          ((string=? (car next-token) "mp-boolean") (get-token) eps)
+          (else (token-error "type" next-token)
                 (exit)))))
 
 ;; <procedure-and-function-declaration-part> -> <procedure-declaration>
@@ -143,22 +193,22 @@
            (get-token)
            (function-declaration)
            (procedure-and-function-declaration-part))
-          (else '""))))
+          (else eps))))
 
 
 ;; <procedure-declaration> -> <procedure-heading> . mp-scolon . <block> . mp-colon
 (define (procedure-declaration)
   (procedure-heading)
-  (expect-token '"mp-scolon" (get-token))
+  (expect-token "mp-scolon" (get-token))
   (block)
-  (expect-token '"mp-scolon" (get-token)))
+  (expect-token "mp-scolon" (get-token)))
 
 ;; <function-declaration> -> <function-heading> . mp-scolon . <block> . mp-colon
 (define (function-declaration)
   (function-heading)
-  (expect-token '"mp-scolon" (get-token))
+  (expect-token "mp-scolon" (get-token))
   (block)
-  (expect-token '"mp-scolon" (get-token)))
+  (expect-token "mp-scolon" (get-token)))
 
 ;; <procedure-heading> -> mp-procedure . <procedure-identifier>
 ;;                        . <optional-formal-parameter-list>
@@ -172,7 +222,7 @@
 (define (function-heading)
   (function-identifier)
   (optional-formal-parameter-list)
-  (expect-token '"mp-colon" (get-token))
+  (expect-token "mp-colon" (get-token))
   (type))
 
 ;; <optional-formal-parameter-list> -> mp-lparen . <formal-parameter-section>
@@ -185,7 +235,7 @@
          (formal-parameter-section)
          (formal-parameter-section-tail)
          (expect-token "mp-rparen" (get-token)))
-        (else '"")))
+        (else eps)))
 
 ;; <formal-parameter-section-tail> -> mp-scolon . <formal-parameter-section>
 ;;                                    . <formal-parameter-section-tail>
@@ -196,7 +246,7 @@
            (get-token)
            (formal-parameter-section)
            (formal-parameter-section-tail))
-          (else '""))))
+          (else eps))))
 
 ;; <formal-parameter-section> -> <value-parameter-section>
 ;;                            -> <variable-parameter-section>
@@ -208,8 +258,7 @@
            (get-token)
            (variable-parameter-section))
           (else
-           (format #t "parse error: expected a variable or value but found ~a at [~a:~a]~%"
-                   (car next-token) (caddr next-token) (cadddr next-token))
+           (token-error "variable or type" next-token)
            (exit)))))
 
 ;; <value-parameter-section> -> <identifier-list> . mp-colon . <type>
@@ -246,12 +295,13 @@
          (get-token)
          (statement)
          (statement-tail))
-        (else '"")))
+        (else eps)))
 
 ;; <statement> -> <empty-statement>
 ;;             -> <compound-statement>
 ;;             -> <read-statement>
 ;;             -> <write-statement>
+;;             -> <writeln-statement>
 ;;             -> <assign-statement>
 ;;             -> <if-statement>
 ;;             -> <while-statement>
@@ -265,7 +315,7 @@
           ((string=? (car next-token) "mp-read") (get-token) (read-statement))
           ((string=? (car next-token) "mp-readln") (get-token) (read-statement))
           ((string=? (car next-token) "mp-write") (get-token) (write-statement))
-          ((string=? (car next-token) "mp-writeln") (get-token) (write-statement))
+          ((string=? (car next-token) "mp-writeln") (get-token) eps)
           ((string=? (car next-token) "mp-if") (get-token) (if-statement))
           ((string=? (car next-token) "mp-while") (get-token) (while-statement))
           ((string=? (car next-token) "mp-repeat") (get-token) (repeat-statement))
@@ -277,8 +327,7 @@
           (else (empty-statement)))))
 
 ;; <empty-statement> -> eps
-(define (empty-statement)
-  '"")
+(define (empty-statement) eps)
 
 ;; <read-statement> -> mp-read . mp-lparen . <read-parameter>
 ;;                     . <read-parameter-tail> . mp-rparen
@@ -295,11 +344,10 @@
          (get-token)
          (read-parameter)
          (read-parameter-tail))
-        (else '"")))
+        (else eps)))
 
 ;; <read-parameter> -> <variable-identifier>
-(define (read-parameter)
-  (variable-identifier))
+(define (read-parameter) (variable-identifier))
 
 ;; <write-statement> -> mp-write . mp-lparen . <write-parameter>
 ;;                      . <write-parameter-tail> . mp-rparen
@@ -318,7 +366,7 @@
          (get-token)
          (write-parameter)
          (write-parameter-tail))
-        (else '"")))
+        (else eps)))
 
 ;; <write-parameter> -> <ordinal-expression>
 (define (write-parameter)
@@ -341,7 +389,7 @@
 ;;                     -> eps
 (define (optional-else-part)
   (cond ((string=? (car peek-token) "mp-else") (get-token) (statement))
-        (else '"")))
+        (else eps)))
 
 ;; <repeat-statement> -> mp-repeat . <statement-sequence> . mp-until
 ;;                       . <boolean-expression>
@@ -379,10 +427,9 @@
 ;;              -> mp-downto
 (define (step-value)
   (let ((next-token (get-token)))
-    (cond ((string=? (car next-token) "mp-to") '())
-          ((string=? (car next-token) "mp-downto") '())
-          (else (format #t "parse error: expected a step-value but found ~a at [~a:~a]~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+    (cond ((string=? (car next-token) "mp-to") eps)
+          ((string=? (car next-token) "mp-downto") eps)
+          (else (token-error "step-value" next-token)
                 (exit)))))
 
 ;; <final-value> -> <ordinal-expression>
@@ -404,7 +451,7 @@
            (actual-parameter)
            (actual-parameter-tail)
            (expect-token "mp-rparen" (get-token )))
-          (else '""))))
+          (else eps))))
 
 
 ;; <actual-parameter-tail> -> mp-comma . <actual-parameter> . <actual-parameter-tail>
@@ -415,7 +462,7 @@
            (get-token)
            (actual-parameter)
            (actual-parameter-tail))
-          (else '""))))
+          (else eps))))
 
 ;; <actual-parameter> -> <ordinal-expression>
 (define (actual-parameter)
@@ -436,9 +483,9 @@
                (string=? (car next-token) "mp-lequal")
                (string=? (car next-token) "mp-gequal")
                (string=? (car next-token) "mp-nequal"))
-           (get-token)
+           (relational-operator)
            (simple-expression))
-          (else '""))))
+          (else eps))))
 
 ;; <relational-operator> -> mp-equal
 ;;                       -> mp-lthan
@@ -448,14 +495,13 @@
 ;;                       -> mp-nequal
 (define (relational-operator)
   (let ((next-token (get-token)))
-    (cond ((string=? (car next-token) "mp-equal") '())
-          ((string=? (car next-token) "mp-lthan") '())
-          ((string=? (car next-token) "mp-gthan") '())
-          ((string=? (car next-token) "mp-lequal") '())
-          ((string=? (car next-token) "mp-gequal") '())
-          ((string=? (car next-token) "mp-nequal") '())
-          (else (format #t "parse error: expected a relation but found ~a at [~a:~a]~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+    (cond ((string=? (car next-token) "mp-equal") eps)
+          ((string=? (car next-token) "mp-lthan") eps)
+          ((string=? (car next-token) "mp-gthan") eps)
+          ((string=? (car next-token) "mp-lequal") eps)
+          ((string=? (car next-token) "mp-gequal") eps)
+          ((string=? (car next-token) "mp-nequal") eps)
+          (else (token-error "relational operator" next-token)
                 (exit)))))
 
 ;; <simple-expression> -> <optional-sign> . <term> . <term-tail>
@@ -474,27 +520,26 @@
            (adding-operator)
            (term)
            (term-tail))
-          (else '""))))
+          (else eps))))
 
 ;; <optional-sign> -> mp-plus
 ;;                 -> mp-minus
 ;;                 -> eps
 (define (optional-sign)
   (let ((next-token (peek-token)))
-    (cond ((string=? (car next-token) "mp-plus") (get-token) '())
-          ((string=? (car next-token) "mp-minus") (get-token) '())
-          (else '""))))
+    (cond ((string=? (car next-token) "mp-plus") (get-token) eps)
+          ((string=? (car next-token) "mp-minus") (get-token) eps)
+          (else eps))))
 
 ;; <adding-operator> -> mp-plus
 ;;                   -> mp-minus
 ;;                   -> mp-or
 (define (adding-operator)
   (let ((next-token (get-token)))
-    (cond ((string=? (car next-token) "mp-plus") '())
-          ((string=? (car next-token) "mp-minus") '())
-          ((string=? (car next-token) "mp-or") '())
-          (else (format #t "parse error: expected an adding operator but found ~a at [~a:~a]~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+    (cond ((string=? (car next-token) "mp-plus") eps)
+          ((string=? (car next-token) "mp-minus") eps)
+          ((string=? (car next-token) "mp-or") eps)
+          (else (token-error "adding operator" next-token)
                 (exit)))))
 
 ;; <term> -> <factor> . <factor-tail>
@@ -511,10 +556,10 @@
                (string=? (car next-token) "mp-div")
                (string=? (car next-token) "mp-mod")
                (string=? (car next-token) "mp-and"))
-           (get-token)
+           (multiplying-operator)
            (factor)
            (factor-tail))
-          (else '""))))
+          (else eps))))
   
   
 ;; <multiplying-operator> -> mp-times
@@ -524,13 +569,12 @@
 ;;                        -> mp-and
 (define (multiplying-operator)
   (let ((next-token (get-token)))
-    (cond ((string=? (car next-token) "mp-times") '())
-          ((string=? (car next-token) "mp-float-divide") '())
-          ((string=? (car next-token) "mp-div") '())
-          ((string=? (car next-token) "mp-mod") '())
-          ((string=? (car next-token) "mp-and") '())
-          (else (format #t "parse error: expected a multiplying operator but found ~a at [~a:~a]~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+    (cond ((string=? (car next-token) "mp-times") eps)
+          ((string=? (car next-token) "mp-float-divide") eps)
+          ((string=? (car next-token) "mp-div") eps)
+          ((string=? (car next-token) "mp-mod") eps)
+          ((string=? (car next-token) "mp-and") eps)
+          (else (token-error "multiplying operator" next-token)
                 (exit)))))
 
 ;; <factor> -> mp-integer-lit
@@ -548,7 +592,7 @@
                (string=? (car next-token) "mp-string-lit")
                (string=? (car next-token) "mp-true")
                (string=? (car next-token) "mp-false"))
-           (get-token) '())
+           (get-token) eps)
           ((string=? (car next-token) "mp-not")
            (get-token)
            (factor))
@@ -559,8 +603,7 @@
           ((string=? (car next-token) "mp-identifier")
            (function-identifier)
            (optional-actual-parameter-list))
-          (else (format #t "parse error: expected a factor but found ~a at [~a:~a]~%"
-                        (car next-token) (caddr next-token) (cadddr next-token))
+          (else (token-error "factor" next-token)
                 (exit)))))
 
 ;; <program-identifier> -> mp-identifier
@@ -600,7 +643,8 @@
            (get-token)
            (expect-token "mp-identifier" (get-token))
            (identifier-tail))
-          (else '""))))
+          (else eps))))
+
 
 
 ;;---------------------------------------------------------;;
@@ -614,12 +658,11 @@
 ;;---------------------------------------------------------;;
 
 (define (main)
-  (let ((fp (open-input-file (cadr (command-line)))))
-    (init-transition-tables)
-    (format #t "Begin program parse -->~%~%")
-    (system-goal)
-    (format #t "~%")
-    ))(main)
+  (init-scanner)
+  (intro-msg)
+  (format #t "~%Begin program parse -->~%~%")
+  (system-goal)
+  (format #t "~%"))(main)
 
 
 ;;---------------------------------------------------------;;
