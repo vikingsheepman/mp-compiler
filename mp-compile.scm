@@ -31,7 +31,7 @@
 (add-to-load-path ".")
 (use-modules (ice-9 regex)
              (scanner)
-             (symantic-analyzer))
+             (semantic-analyzer))
 
 
 
