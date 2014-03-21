@@ -19,5 +19,5 @@ begin
    readln(i); { get i }
    count(i, sum); { call count} 
    write(sum); { write result }
-   {writeln; -- will implement this later}
+   writeln;
 end.
