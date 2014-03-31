@@ -106,142 +106,143 @@
 (define (init-transition-tables)
   (define digit-start-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-integer-lit")
-                               (else '"reject"))))
-     '("mp-integer-lit" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-integer-lit")
-                                           ((string=? "." x) '"digit-dot")
-                                           ((string-match "e|E" x) '"e-char")
-                                           (else '"reject"))))           
-     '("digit-dot" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-fixed-lit")
-                                      (else '"reject"))))         
-     '("mp-fixed-lit" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-fixed-lit")
-                                         ((string-match "e|E" x) '"e-char")
-                                         (else '"reject"))))         
-     '("e-char" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-float-lit")
-                                   ((string-match "\\+|-" x) '"signed-char")
-                                   (else '"reject"))))         
-     '("signed-char" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-float-lit")
-                                        (else '"reject"))))     
-     '("mp-float-lit" '(lambda (x) (cond ((string-match "[0-9]" x) '"mp-float-lit")
-                                         (else '"reject"))))))
+     '("q0"              (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-integer-lit")
+                                           (else                             "reject"))))
+     '("mp-integer-lit"  (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-integer-lit")
+                                           ((string=?      "."            x) "digit-dot")
+                                           ((string-match  "e|E"          x) "e-char")
+                                           (else                             "reject"))))           
+     '("digit-dot"       (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-fixed-lit")
+                                           (else                             "reject"))))         
+     '("mp-fixed-lit"    (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-fixed-lit")
+                                           ((string-match  "e|E"          x) "e-char")
+                                           (else                             "reject"))))         
+     '("e-char"          (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-float-lit")
+                                           ((string-match  "\\+|-"        x) "signed-char")
+                                           (else                             "reject"))))         
+     '("signed-char"     (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-float-lit")
+                                           (else                             "reject"))))     
+     '("mp-float-lit"    (lambda (x) (cond ((string-match  "[0-9]"        x) "mp-float-lit")
+                                           (else                             "reject"))))))
 
   (define letter-start-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string-match "[a-zA-Z]" x) '"word")
-                               (else '"reject"))))        
-     '("word" '(lambda (x) (cond ((string-match "[a-zA-Z]" x) '"word")
-                                 ((string-match "[0-9]" x) '"mp-identifier")
-                                 ((string=? "_" x) '"uscore")
-                                 (else '"reject"))))
-     '("uscore" '(lambda (x) (cond ((string-match "[0-9a-zA-Z]" x) '"mp-identifier")
-                                   (else '"reject"))))        
-     '("mp-identifier" '(lambda (x) (cond ((string-match "[0-9a-zA-Z]" x) '"mp-identifier")
-                                          ((string=? "_" x) '"uscore")
-                                          (else '"reject"))))))
+     '("q0"              (lambda (x) (cond ((string-match  "[a-zA-Z]"     x) "word")
+                                           (else                             "reject"))))        
+     '("word"            (lambda (x) (cond ((string-match  "[a-zA-Z]"     x) "word")
+                                           ((string-match  "[0-9]"        x) "mp-identifier")
+                                           ((string=?      "_"            x) "uscore")
+                                           (else                             "reject"))))
+     '("uscore"          (lambda (x) (cond ((string-match  "[0-9a-zA-Z]"  x) "mp-identifier")
+                                           (else                             "reject"))))        
+     '("mp-identifier"   (lambda (x) (cond ((string-match  "[0-9a-zA-Z]"  x) "mp-identifier")
+                                           ((string=?      "_"            x) "uscore")
+                                           (else                             "reject"))))))
   
   (define comment-transitions-list
     (list
-      '("q0" '(lambda (x) (cond ((string=? "{" x) '"unclosed")
-                                (else '"reject"))))
-      '("unclosed" '(lambda (x) (cond ((string=? "}" x) '"mp-comment")
-                                      (else '"unclosed"))))
-      '("mp-comment" '(lambda (x) '"reject"))))
+      '("q0"             (lambda (x) (cond ((string=?      "{"            x)  "unclosed")
+                                           (else                              "reject"))))
+      '("unclosed"       (lambda (x) (cond ((string=?      "}"            x)  "mp-comment")
+                                           (else                              "unclosed"))))
+      '("mp-comment"     (lambda (x)                                          "reject"))))
 
   (define string-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "'") '"unclosed-str")
-                               (else '"reject"))))    
-     '("unclosed-str" '(lambda (x) (cond ((string=? x "'")  '"apos")
-                                          (else '"unclosed-str"))))
-     '("apos" '(lambda (x) (cond ((string=? x "'") '"unclosed-str")
-                                 (else (unread-string x fp) '"mp-string-lit"))))
-     '("mp-string-lit" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "'"            x)  "unclosed-str")
+                                           (else                              "reject"))))    
+     '("unclosed-str"    (lambda (x) (cond ((string=?      "'"            x)  "apos")
+                                           (else                              "unclosed-str"))))
+     '("apos"            (lambda (x) (cond ((string=?      "'"            x)  "unclosed-str")
+                                           (else                              ;(unread-string x fp)
+                                                                              "mp-string-lit"))))
+     '("mp-string-lit"   (lambda (x)                                          "reject"))))
 
   (define colon-start-transitions-list
    (list
-    '("q0" '(lambda (x) (cond ((string=? x ":") '"mp-colon")
-                              (else '"reject"))))   
-    '("mp-colon" '(lambda (x) (cond ((string=? x "=") '"mp-assign")
-                                    (else '"reject"))))   
-    '("mp-assign" '(lambda (x) '"reject"))))
+    '("q0"               (lambda (x) (cond ((string=?      ":"            x)  "mp-colon")
+                                           (else                              "reject"))))   
+    '("mp-colon"         (lambda (x) (cond ((string=?      "="            x)  "mp-assign")
+                                           (else                              "reject"))))   
+    '("mp-assign"        (lambda (x)                                          "reject"))))
 
   (define scolon-transitions-list
    (list
-    '("q0" '(lambda (x) (cond ((string=? x ";") '"mp-scolon")
-                              (else '"reject"))))
-    '("mp-scolon" '(lambda (x) '"reject"))))
+    '("q0"               (lambda (x) (cond ((string=?      ";"            x)  "mp-scolon")
+                                           (else                              "reject"))))
+    '("mp-scolon"        (lambda (x)                                          "reject"))))
 
   (define comma-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x ",") '"mp-comma")
-                               (else '"reject"))))
-     '("mp-comma" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      ","            x)  "mp-comma")
+                                           (else                              "reject"))))
+     '("mp-comma"        (lambda (x)                                          "reject"))))
 
   (define period-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x ".") '"mp-period")
-                               (else '"reject"))))
-     '("mp-period" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "."            x)  "mp-period")
+                                           (else                              "reject"))))
+     '("mp-period"       (lambda (x)                                          "reject"))))
 
   (define equals-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "=") '"mp-equal")
-                               (else '"reject"))))
-     '("mp-equal" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "="            x)  "mp-equal")
+                                           (else                              "reject"))))
+     '("mp-equal"        (lambda (x)                                          "reject"))))
 
   (define greater-start-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x ">") '"mp-gthan")
-                               (else '"reject"))))
-     '("mp-gthan" '(lambda (x) (cond ((string=? x "=") '"mp-gequal")
-                                     (else '"reject"))))
-     '("mp-gequal" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      ">"            x)  "mp-gthan")
+                                           (else                              "reject"))))
+     '("mp-gthan"        (lambda (x) (cond ((string=?      "="            x)  "mp-gequal")
+                                           (else                              "reject"))))
+     '("mp-gequal"       (lambda (x)                                          "reject"))))
 
   (define less-start-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "<") '"mp-lthan")
-                                          (else '"reject"))))
-     '("mp-lthan" '(lambda (x) (cond ((string=? x "=") '"mp-lequal")
-                                     ((string=? x ">") '"mp-nequal")
-                                     (else '"reject"))))
-     '("mp-lequal" '(lambda (x) '"reject"))
-     '("mp-nequal" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "<"            x)  "mp-lthan")
+                                           (else                              "reject"))))
+     '("mp-lthan"        (lambda (x) (cond ((string=?      "="            x)  "mp-lequal")
+                                           ((string=?      ">"            x)  "mp-nequal")
+                                           (else                              "reject"))))
+     '("mp-lequal"       (lambda (x)                                          "reject"))
+     '("mp-nequal"       (lambda (x)                                          "reject"))))
 
   (define lparen-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "(") '"mp-lparen")
-                               (else '"reject"))))
-     '("mp-lparen" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "("            x)  "mp-lparen")
+                                           (else                              "reject"))))
+     '("mp-lparen"       (lambda (x)                                          "reject"))))
 
   (define rparen-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x ")") '"mp-rparen")
-                               (else '"reject"))))
-     '("mp-rparen" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      ")"            x)  "mp-rparen")
+                                           (else                              "reject"))))
+     '("mp-rparen"       (lambda (x)                                          "reject"))))
 
   (define plus-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "+") '"mp-plus")
-                               (else '"reject"))))
-     '("mp-plus" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "+"            x)  "mp-plus")
+                                           (else                              "reject"))))
+     '("mp-plus"         (lambda (x)                                          "reject"))))
 
   (define minus-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "-") '"mp-minus")
-                               (else '"reject"))))
-     '("mp-minus" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "-"            x)  "mp-minus")
+                                           (else                              "reject"))))
+     '("mp-minus"        (lambda (x)                                          "reject"))))
 
   (define times-transitions-list
    (list
-    '("q0" '(lambda (x) (cond ((string=? x "*") '"mp-times")
-                              (else '"reject"))))
-    '("mp-times" '(lambda (x) '"reject"))))
+    '("q0"               (lambda (x) (cond ((string=?      "*"            x)  "mp-times")
+                                           (else                              "reject"))))
+    '("mp-times"         (lambda (x)                                          "reject"))))
 
   (define float-divide-transitions-list
     (list
-     '("q0" '(lambda (x) (cond ((string=? x "/") '"mp-float-divide")
-                               (else '"reject"))))
-     '("mp-float-divide" '(lambda (x) '"reject"))))
+     '("q0"              (lambda (x) (cond ((string=?      "/"            x)  "mp-float-divide")
+                                           (else                              "reject"))))
+     '("mp-float-divide" (lambda (x)                                          "reject"))))
 
   ;; micro-pascal reserved words
   (define reserved-words-list
@@ -431,107 +432,105 @@
       (cond
        ((eof-object? char)
         (cond ((eq? dfa mp-comment-dfa)     (list "mp-run-comment" "run-on-comment" linum colnum))
-              ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string" "run-on-string" linum colnum))
+              ((eq? dfa mp-string-lit-dfa)  (list "mp-run-string"  "run-on-string"  linum colnum))
               ((eq? dfa mp-period-dfa)      (list current-state lexeme linum colnum))))
        (else
-        (let ((transition (eval (hash-ref (car dfa) current-state) (current-module))))
-          (let ((next-state ((eval transition (current-module)) (string char)))
-                (final-states (cadr dfa)))
-
-           ; (cond ((string=? (string char) "\n") (set! linum (+ linum 1))))
-            
-            (cond ((string=? next-state "reject")
-                   (cond ((member current-state final-states)    (list current-state lexeme linum colnum))
-                   
-                         (else                                   (file-position (- fp fp-offset))
-                                                                 (set! linum    (caddr last-token))
-                                                                 (set! colnum   (cadddr last-token))
-                                                                 (last-token))))
-              
-                  (else
-                   (cond ((member next-state final-states)      (set! lexeme      (string-append lexeme (string char)))
-                                                                (set! last-token  (list next-state lexeme linum colnum))
-                                                                (set! fp-offset   0)
-                                                                (set! colnum      (+ colnum 1))
-                                                                (read-char fp)
-                                                                (run-dfa dfa next-state (peek-char fp)))
-                                                         
-                         (else                                  (set! lexeme      (string-append lexeme (string char)))
-                                                                (set! fp-offset   (+ fp-offset 1))
-                                                                (set! colnum      (+ colnum 1))
-                                                                (read-char fp)
-                                                                (run-dfa dfa next-state (peek-char fp)))))
-                  )))))) ;; end run-dfa
-
-    (cond
-     ((eof-object? next-char) (list "mp-eof" "<eof>" linum colnum))
-
-     ;; sort out identifiers and reservered words from each other
-     ((string-match "[a-zA-Z]"  (string next-char))
-      (let ((id-found (run-dfa mp-letter-start-dfa "q0" next-char)))
-        (cond ((string=? (car id-found) "word")
-               (list
-                (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
-                (cadr id-found) (caddr id-found) (cadddr id-found)))
-              ((string=? (car id-found) "uscore")
-               (list "mp-identifier" (cadr id-found) (caddr id-found) (cadddr id-found)))
-              (else id-found))))
+        (let ((next-state ((eval (hash-ref (car dfa) current-state) (current-module)) (string char)))
+              (final-states (cadr dfa)))
           
-     ((string-match  "[0-9]"  (string next-char))    (run-dfa mp-digit-start-dfa    "q0" next-char))
+          (cond ((string=? next-state "reject")
+                 (cond ((member current-state final-states)   (list current-state lexeme linum colnum))
+                       
+                       (else                                  (file-position (- fp fp-offset))
+                                                              (set! linum    (caddr last-token))
+                                                              (set! colnum   (cadddr last-token))
+                                                              (last-token))))
+                
+                (else
+                 (cond ((member next-state final-states)      (set! lexeme      (string-append lexeme (string char)))
+                                                              (set! last-token  (list next-state lexeme linum colnum))
+                                                              (set! fp-offset   0)
+                                                              (set! colnum      (+ colnum 1))
+                                                              (read-char fp)
+                                                              (run-dfa dfa next-state (peek-char fp)))
+                       
+                       (else                                  (set! lexeme      (string-append lexeme (string char)))
+                                                              (set! fp-offset   (+ fp-offset 1))
+                                                              (set! colnum      (+ colnum 1))
+                                                              (read-char fp)
+                                                              (run-dfa dfa next-state (peek-char fp)))))
+                ))))) ;; end run-dfa
+
+  ;; start of token dispatcher
+  (cond
+   ((eof-object? next-char) (list "mp-eof" "<eof>" linum colnum))
+
+   ;; sort out identifiers and reservered words from each other
+   ((string-match "[a-zA-Z]"  (string next-char))
+    (let ((id-found (run-dfa mp-letter-start-dfa "q0" next-char)))
+      (cond ((string=? (car id-found) "word")
+             (list
+              (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
+              (cadr id-found) (caddr id-found) (cadddr id-found)))
+            ((string=? (car id-found) "uscore")
+             (list "mp-identifier" (cadr id-found) (caddr id-found) (cadddr id-found)))
+            (else id-found))))
+   
+   ((string-match  "[0-9]"  (string next-char))    (run-dfa mp-digit-start-dfa    "q0" next-char))
+   
+   ((string=?      "'"      (string next-char))    (run-dfa mp-string-lit-dfa     "q0" next-char))
+   
+   ((string=?      "{"      (string next-char))    (run-dfa mp-comment-dfa        "q0" next-char))
+   
+   ((string=?      ":"      (string next-char))    (run-dfa mp-colon-start-dfa    "q0" next-char))
+   
+   ((string=?      ";"      (string next-char))    (run-dfa mp-scolon-dfa         "q0" next-char))
+   
+   ((string=?      ","      (string next-char))    (run-dfa mp-comma-dfa          "q0" next-char))
+   
+   ((string=?      "."      (string next-char))    (run-dfa mp-period-dfa         "q0" next-char))
+   
+   ((string=?      "="      (string next-char))    (run-dfa mp-equal-dfa          "q0" next-char))
+   
+   ((string=?      ">"      (string next-char))    (run-dfa mp-greater-start-dfa  "q0" next-char))
+   
+   ((string=?      "<"      (string next-char))    (run-dfa mp-less-start-dfa     "q0" next-char))
+   
+   ((string=?      "("      (string next-char))    (run-dfa mp-lparen-dfa         "q0" next-char))
+   
+   ((string=?      ")"      (string next-char))    (run-dfa mp-rparen-dfa         "q0" next-char))
+   
+   ((string=?      "+"      (string next-char))    (run-dfa mp-plus-dfa           "q0" next-char))
+   
+   ((string=?      "-"      (string next-char))    (run-dfa mp-minus-dfa          "q0" next-char))
+   
+   ((string=?      "*"      (string next-char))    (run-dfa mp-times-dfa          "q0" next-char))
+   
+   ((string=?      "/"      (string next-char))    (run-dfa mp-float-divide-dfa   "q0" next-char))
+   
+   ((string=?      "\n"     (string next-char))    (set! linum (+ linum 1))
+                                                   (set! colnum 0)
+                                                   (read-char fp)
+                                                   '())
+   
+   ((string=?      " "      (string next-char))    (set! colnum (+ colnum 1))
+                                                   (read-char fp)
+                                                   '())
      
-     ((string=?      "'"      (string next-char))    (run-dfa mp-string-lit-dfa     "q0" next-char))
-     
-     ((string=?      "{"      (string next-char))    (run-dfa mp-comment-dfa        "q0" next-char))
-     
-     ((string=?      ":"      (string next-char))    (run-dfa mp-colon-start-dfa    "q0" next-char))
-     
-     ((string=?      ";"      (string next-char))    (run-dfa mp-scolon-dfa         "q0" next-char))
-     
-     ((string=?      ","      (string next-char))    (run-dfa mp-comma-dfa          "q0" next-char))
-     
-     ((string=?      "."      (string next-char))    (run-dfa mp-period-dfa         "q0" next-char))
-     
-     ((string=?      "="      (string next-char))    (run-dfa mp-equal-dfa          "q0" next-char))
-     
-     ((string=?      ">"      (string next-char))    (run-dfa mp-greater-start-dfa  "q0" next-char))
-     
-     ((string=?      "<"      (string next-char))    (run-dfa mp-less-start-dfa     "q0" next-char))
-     
-     ((string=?      "("      (string next-char))    (run-dfa mp-lparen-dfa         "q0" next-char))
-     
-     ((string=?      ")"      (string next-char))    (run-dfa mp-rparen-dfa         "q0" next-char))
-     
-     ((string=?      "+"      (string next-char))    (run-dfa mp-plus-dfa           "q0" next-char))
-     
-     ((string=?      "-"      (string next-char))    (run-dfa mp-minus-dfa          "q0" next-char))
-     
-     ((string=?      "*"      (string next-char))    (run-dfa mp-times-dfa          "q0" next-char))
-     
-     ((string=?      "/"      (string next-char))    (run-dfa mp-float-divide-dfa   "q0" next-char))
-     
-     ((string=?      "\n"     (string next-char))    (set! linum (+ linum 1))
-                                                     (set! colnum 0)
-                                                     (read-char fp)
-                                                     '())
-     
-     ((string=?      " "      (string next-char))    (set! colnum (+ colnum 1))
-                                                     (read-char fp)
-                                                     '())
-     
-     ((string=?      "\t"     (string next-char))    (set! colnum (+ colnum 1))
-                                                     (read-char fp)
-                                                     '())
+   ((string=?      "\t"     (string next-char))    (set! colnum (+ colnum 1))
+                                                   (read-char fp)
+                                                   '())
      
      
-     ((string=?      "\r"     (string next-char))    (read-char fp)
-                                                     '())
+   ((string=?      "\r"     (string next-char))    (read-char fp)
+                                                   '())
      
-     (else                                           (list
-                                                      "mp-error"
-                                                      (string (read-char fp))
-                                                      (number->string linum)
-                                                      (number->string colnum)))
-     ))) ;; end get-next-token
+   (else                                           (list
+                                                    "mp-error"
+                                                    (string (read-char fp))
+                                                    (number->string linum)
+                                                    (number->string colnum)))
+   ))) ;; end get-next-token
 
 ;; undo a read string
 (define (undo str)
@@ -584,7 +583,6 @@
     (let ((reversed (string->list (string-reverse (cadr token)))))
       (undo reversed))
     token))
-
 
 
 ;;---------------------------------------------------------;;

@@ -29,7 +29,8 @@
 
 ;; load modules
 (add-to-load-path ".")
-(use-modules (ice-9 regex)
+(use-modules (srfi srfi-1)
+             (ice-9 regex)
              (scanner)
              (semantic-analyzer))
 
@@ -69,13 +70,15 @@
 ;; epsilon definition
 (define eps "")
 
+;; global variable to hold current operation
+(define operation "")
+
 ;; welcome mesage
 (define (intro-msg)
-  (format #t "Micro-Pascal Compiler")
-  (format #t "Version: 1.0")
-  (format #t "Author: Killian Smith")
-  (format #t "Last Modified: March 2015")
-  (format #t "~%"))
+  (format #t "~%Micro-Pascal Compiler~%")
+  (format #t "Version: 1.0~%")
+  (format #t "Author: Killian Smith~%")
+  (format #t "Last Modified: March 2015~%~%"))
 
 
 
@@ -87,25 +90,49 @@
 ;; micro-pascal grammar in EBNF form. The comments above   ;;
 ;; each function show the parse rule in its original form. ;; 
 ;;                                                         ;;
+;; During the program parse, records are added to the set  ;;
+;; of program symbol tables in the form of a list:         ;;
+;;                                                         ;;
+;;     -> ( lexeme,                                        ;;
+;;          kind,                                          ;;
+;;          type,                                          ;;
+;;          size,                                          ;;
+;;          offset                                         ;;
+;;          label )                                        ;;
+;;                                                         ;;
 ;;---------------------------------------------------------;;
 
 ;; <system-goal> -> <program> . EOF
 (define (system-goal)
+  ;; setup output bytecode
+  (write-init)
+
+  ;; start program parse
   (program)
   (expect-token "mp-eof" (get-token))
   (format #t "The program has parsed successfully!~%~%"))
 
+
 ;; <program> -> <program-heading> . mp-scolon . <block> . mp-period
 (define (program)
+  ;-- construct new symbol table (begin scope)
+  ;-- this will be the root level scope
+  (make-table)
+  ;-- grammar rule
   (program-heading)
   (expect-token "mp-scolon" (get-token))
   (block)
+  ;-- pop the symbol table (end of scope)
+  (pop-table)
+  ;-- finish grammar rule
   (expect-token "mp-period" (get-token)))
+
 
 ;; <program-heading> -> mp-program . <program-identifier>
 (define (program-heading)
   (expect-token "mp-program" (get-token))
   (program-identifier))
+
 
 ;; <block> -> <variable-declaration-part> . <procedure-and-function-declaration-part>
 ;;            . <statement-part>
@@ -113,6 +140,7 @@
   (variable-declaration-part)
   (procedure-and-function-declaration-part)
   (statement-part))
+
 
 ;; <variable-declaration-part> -> mp-var . <variable-declaration> . mp-scolon
 ;;                                . <variable-declaration-tail>
@@ -125,6 +153,7 @@
          (variable-declaration-tail))
         (else eps)))
 
+
 ;; <variable-declaration-tail> -> <variable-declaration> . mp-scolon
 ;;                                . <variable-declaration-tail>
 ;;                             -> eps
@@ -136,11 +165,22 @@
          (variable-declaration-tail))
         (else eps)))
 
+
 ;; <variable-declaration> -> <identifier-list> . mp-colon . <type>
 (define (variable-declaration)
-  (identifier-list)
-  (expect-token "mp-colon" (get-token))
-  (type))
+  ;; fill in vars in symbol table as grammar is parsed
+  (let ((id-list (identifier-list)))
+    (expect-token "mp-colon" (get-token))
+    (let ((var-type (type)))
+      (map (lambda (id)
+             (insert-symbol '(id "var" (car var-type) (cadr var-type))))
+           id-list)))
+  
+  ;; semantic call to allocate var definitions to stack
+  (write-static-vars)
+  
+  (display-table))
+
 
 ;; <type> -> mp-integer
 ;;        -> mp-float
@@ -148,12 +188,15 @@
 ;;        -> mp-boolean
 (define (type)
   (let ((next-token (peek-token)))
-    (cond ((string=? (car next-token) "mp-integer") (get-token) eps)
-          ((string=? (car next-token) "mp-float") (get-token) eps)
-          ((string=? (car next-token) "mp-string") (get-token) eps)
-          ((string=? (car next-token) "mp-boolean") (get-token) eps)
+    ;; there is no 'char' type in given grammar
+    ;; returns tuple of type and size of type
+    (cond ((string=? (car next-token) "mp-integer") (get-token) '("int" 4))
+          ((string=? (car next-token) "mp-float") (get-token) '("float" 8))
+          ((string=? (car next-token) "mp-string") (get-token) '("string" '()))
+          ((string=? (car next-token) "mp-boolean") (get-token) '("bool" 1))
           (else (token-error "type" next-token)
                 (exit)))))
+
 
 ;; <procedure-and-function-declaration-part> -> <procedure-declaration>
 ;;                                              . <procedure-and-function-declaration-part>
@@ -175,23 +218,38 @@
 
 ;; <procedure-declaration> -> <procedure-heading> . mp-scolon . <block> . mp-colon
 (define (procedure-declaration)
+  ;-- construct new symbol table (begin scope)
+  (make-table)
+  ;-- grammar rule
   (procedure-heading)
   (expect-token "mp-scolon" (get-token))
   (block)
+  ;-- pop the symbol table (end of scope)
+  (pop-table)
+  ;-- finish grammar rule
   (expect-token "mp-scolon" (get-token)))
+
 
 ;; <function-declaration> -> <function-heading> . mp-scolon . <block> . mp-colon
 (define (function-declaration)
+  ;-- construct new symbol table (begin scope)
+  (make-table)
+  ;-- grammar rule
   (function-heading)
   (expect-token "mp-scolon" (get-token))
   (block)
+  ;-- pop the symbol table (end of scope)
+  (pop-table)
+  ;-- finish grammar rule
   (expect-token "mp-scolon" (get-token)))
+
 
 ;; <procedure-heading> -> mp-procedure . <procedure-identifier>
 ;;                        . <optional-formal-parameter-list>
 (define (procedure-heading)
   (procedure-identifier)
   (optional-formal-parameter-list))
+
 
 ;; <function-heading> -> mp-function . <function-identifier>
 ;;                       . <optional-formal-parameter-list>
@@ -201,6 +259,7 @@
   (optional-formal-parameter-list)
   (expect-token "mp-colon" (get-token))
   (type))
+
 
 ;; <optional-formal-parameter-list> -> mp-lparen . <formal-parameter-section>
 ;;                                     . <formal-parameter-section-tail>
@@ -214,6 +273,7 @@
          (expect-token "mp-rparen" (get-token)))
         (else eps)))
 
+
 ;; <formal-parameter-section-tail> -> mp-scolon . <formal-parameter-section>
 ;;                                    . <formal-parameter-section-tail>
 ;;                                 -> eps
@@ -224,6 +284,7 @@
            (formal-parameter-section)
            (formal-parameter-section-tail))
           (else eps))))
+
 
 ;; <formal-parameter-section> -> <value-parameter-section>
 ;;                            -> <variable-parameter-section>
@@ -238,11 +299,13 @@
            (token-error "variable or type" next-token)
            (exit)))))
 
+
 ;; <value-parameter-section> -> <identifier-list> . mp-colon . <type>
 (define (value-parameter-section)
   (identifier-list)
   (expect-token "mp-colon" (get-token))
   (type))
+
 
 ;; <variable-parameter-section> -> mp-var . <identifier-list> . mp-colon . <type>
 (define (variable-parameter-section)
@@ -250,9 +313,11 @@
   (expect-token "mp-colon" (get-token))
   (type))
 
+
 ;; <statement-part> -> <compound-statement> 
 (define (statement-part)
   (compound-statement))
+
 
 ;; <compound-statement> -> mp-begin . <statement-sequence> . mp-end
 (define (compound-statement)
@@ -260,10 +325,12 @@
   (statement-sequence)
   (expect-token "mp-end" (get-token)))
 
+
 ;; <statement-sequence> -> <statement> . <statement-tail>
 (define (statement-sequence)
   (statement)
   (statement-tail))
+
 
 ;; <statement-tail> -> mp-scolon . <statement> . <statement-tail>
 ;;                  -> eps
@@ -273,6 +340,7 @@
          (statement)
          (statement-tail))
         (else eps)))
+
 
 ;; <statement> -> <empty-statement>
 ;;             -> <compound-statement>
@@ -303,8 +371,10 @@
                  (else (backtrack-token tmp-token) (procedure-statement))))
           (else (empty-statement)))))
 
+
 ;; <empty-statement> -> eps
 (define (empty-statement) eps)
+
 
 ;; <read-statement> -> mp-read . mp-lparen . <read-parameter>
 ;;                     . <read-parameter-tail> . mp-rparen
@@ -313,6 +383,7 @@
   (read-parameter)
   (read-parameter-tail)
   (expect-token "mp-rparen" (get-token)))
+
 
 ;; <read-parameter-tail> -> mp-comma . <read-parameter> . <read-parameter-tail>
 ;;                       -> eps
@@ -323,8 +394,10 @@
          (read-parameter-tail))
         (else eps)))
 
+
 ;; <read-parameter> -> <variable-identifier>
 (define (read-parameter) (variable-identifier))
+
 
 ;; <write-statement> -> mp-write . mp-lparen . <write-parameter>
 ;;                      . <write-parameter-tail> . mp-rparen
@@ -336,6 +409,7 @@
   (write-parameter-tail)
   (expect-token "mp-rparen" (get-token)))
 
+
 ;; <write-parameter-tail> -> mp-comma . <write-parameter> . <write-parameter-tail>
 ;;                        -> eps
 (define (write-parameter-tail)
@@ -345,14 +419,17 @@
          (write-parameter-tail))
         (else eps)))
 
+
 ;; <write-parameter> -> <ordinal-expression>
 (define (write-parameter)
   (ordinal-expression))
+
 
 ;; <assignment-statement> -> <variable-identifier> . mp-assignment . <expression>
 ;;                        -> <function-identifier> . mp-assignment . <expression>
 (define (assignment-statement)
   (expression))
+
 
 ;; <if-statement> -> mp-if . <boolean-expression> . mp-then
 ;;                   . <statement> . <optional-else-part>
@@ -362,11 +439,13 @@
   (statement)
   (optional-else-part))
 
+
 ;;<optional-else-part> -> mp-else . <statement>
 ;;                     -> eps
 (define (optional-else-part)
   (cond ((string=? (car peek-token) "mp-else") (get-token) (statement))
         (else eps)))
+
 
 ;; <repeat-statement> -> mp-repeat . <statement-sequence> . mp-until
 ;;                       . <boolean-expression>
@@ -375,11 +454,13 @@
   (expect-token "mp-until" (get-token))
   (boolean-expression))
 
+
 ;; <while-statement> -> mp-while . <boolean-expression> . mp-do . <statement>
 (define (while-statement)
   (boolean-expression)
   (expect-token "mp-do" (get-token))
   (statement))
+
 
 ;; <for-statement> -> mp-for . <control-variable> . mp-assigment . <initial-value>
 ;;                    . <step-value> . <final-value> . mp-do . <statement>
@@ -392,13 +473,16 @@
   (expect-token "mp-do" (get-token))
   (statement))
 
+
 ;; <control-variable> -> <variable-identifier>
 (define (control-variable)
   (variable-identifier))
 
+
 ;; <initial-value> -> <ordinal-expression>
 (define (initial-value)
   (ordinal-expression))
+
 
 ;; <step-value> -> mp-to
 ;;              -> mp-downto
@@ -409,14 +493,17 @@
           (else (token-error "step-value" next-token)
                 (exit)))))
 
+
 ;; <final-value> -> <ordinal-expression>
 (define (final-value)
   (ordinal-expression))
+
 
 ;; <procedure-statement> -> <procedure-identifier> . <optional-actual-parameter-list>
 (define (procedure-statement)
   (procedure-identifier)
   (optional-actual-parameter-list))
+
 
 ;; <optional-actual-parameter-list> -> mp-lparen . <actual-parameter> . <actual-parameter-tail>
 ;;                                     . mp-rparen
@@ -441,14 +528,17 @@
            (actual-parameter-tail))
           (else eps))))
 
+
 ;; <actual-parameter> -> <ordinal-expression>
 (define (actual-parameter)
   (ordinal-expression))
+
 
 ;; <expression> -> <simple-expression> . <optional-relation-part>
 (define (expression)
   (simple-expression)
   (optional-relation-part))
+
 
 ;; <optional-relation-part> -> <relational-operator> . <simple-expression>
 ;;                          -> eps
@@ -463,6 +553,7 @@
            (relational-operator)
            (simple-expression))
           (else eps))))
+
 
 ;; <relational-operator> -> mp-equal
 ;;                       -> mp-lthan
@@ -481,11 +572,13 @@
           (else (token-error "relational operator" next-token)
                 (exit)))))
 
+
 ;; <simple-expression> -> <optional-sign> . <term> . <term-tail>
 (define (simple-expression)
   (optional-sign)
   (term)
   (term-tail))
+
 
 ;; <term-tail> -> <adding-operator> . <term> . <term-tail>
 ;;             -> eps
@@ -499,6 +592,7 @@
            (term-tail))
           (else eps))))
 
+
 ;; <optional-sign> -> mp-plus
 ;;                 -> mp-minus
 ;;                 -> eps
@@ -507,6 +601,7 @@
     (cond ((string=? (car next-token) "mp-plus") (get-token) eps)
           ((string=? (car next-token) "mp-minus") (get-token) eps)
           (else eps))))
+
 
 ;; <adding-operator> -> mp-plus
 ;;                   -> mp-minus
@@ -519,10 +614,12 @@
           (else (token-error "adding operator" next-token)
                 (exit)))))
 
+
 ;; <term> -> <factor> . <factor-tail>
 (define (term)
   (factor)
   (factor-tail))
+
 
 ;; <factor-tail> -> <multiplying-operator> . <factor> . <factor-tail>
 ;;               -> eps
@@ -554,6 +651,7 @@
           (else (token-error "multiplying operator" next-token)
                 (exit)))))
 
+
 ;; <factor> -> mp-integer-lit
 ;;          -> mp-float-lit
 ;;          -> mp-string-lit
@@ -583,43 +681,66 @@
           (else (token-error "factor" next-token)
                 (exit)))))
 
+
 ;; <program-identifier> -> mp-identifier
 (define (program-identifier)
   (expect-token "mp-identifier" (get-token)))
+
 
 ;; <variable-identifier> -> mp-identifier
 (define (variable-identifier)
   (expect-token "mp-identifier" (get-token)))
 
+
 ;; <procedure-identifier> -> mp-identifier
 (define (procedure-identifier)
   (expect-token "mp-identifier" (get-token)))
+
 
 ;; <function-identifier> -> mp-identifier
 (define (function-identifier)
   (expect-token "mp-identifier" (get-token)))
 
+
 ;; <boolean-expression> -> <expression>
 (define (boolean-expression)
   (expression))
+
 
 ;; <ordinal-expression> -> <expression>
 (define (ordinal-expression)
   (expression))
 
+
 ;; <identifier-list> -> mp-identifier . <identifier-tail>
 (define (identifier-list)
-  (expect-token "mp-identifier" (get-token))
-  (identifier-tail))
+  (let ((token (get-token))
+        (tmp-id-list '()))
+    (expect-token "mp-identifier" token)
+
+    ;; append the identifier to the temperary
+    ;; identifier table holding list
+    (append tmp-id-list (cadr token))
+
+    (identifier-tail tmp-id-list)
+
+    ;; return the list of identifiers
+    tmp-id-list))
+
 
 ;; <identifier-tail> -> mp-comma . <identifier> . <identifier-tail>
 ;;                   -> eps
-(define (identifier-tail)
+(define (identifier-tail tmp-id-list)
   (let ((next-token (peek-token)))
     (cond ((string=? (car next-token) "mp-comma")
            (get-token)
            (expect-token "mp-identifier" (get-token))
-           (identifier-tail))
+
+           ;; append the identifier to the temperary
+           ;; identifier table holding list
+           (append tmp-id-list (cadr next-token))
+
+           (identifier-tail tmp-id-list))
           (else eps))))
 
 
@@ -637,8 +758,9 @@
 (define (main)
   (init-scanner)
   (intro-msg)
-  (format #t "~%Begin mp-compile program -->~%~%")
+  (format #t "Compiling Mico-Pascal Program -->~%~%~%")
   (system-goal)
+  (format #t "~%Finished Process~%")
   (format #t "~%"))(main)
 
 

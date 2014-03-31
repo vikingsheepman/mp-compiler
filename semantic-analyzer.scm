@@ -23,7 +23,22 @@
 ;;---------------------------------------------------------;;
 
 (define-module (semantic-analyzer)
-  #:export (make-table destroy-table insert-symbol lookup-symbol))
+  #:use-module (srfi srfi-1)
+  #:export (
+            ;; symbol table functions
+            make-table
+            pop-table
+            insert-symbol
+            lookup-symbol
+
+            ;; semantic functions
+            write-init
+            write-static-vars
+
+            ;;debug
+            display-prog
+            display-table
+            ))
 
 
 
@@ -37,7 +52,7 @@
 ;;                                                         ;;
 ;; make-table -> Generate a new symbol table.              ;;
 ;;                                                         ;;
-;; destroy-table -> Remove the current symbol table.       ;;
+;; pop-table -> Remove the current symbol table.           ;;
 ;;                                                         ;;
 ;; insert-symbol -> Insert an entry into the current       ;;
 ;;                  symbol table.                          ;;
@@ -47,18 +62,30 @@
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
+;; global symbol table
 (define table-list '())
 
+;; holding cell for current stack offset
+(define offset 0)
+
+;; holding cell for current nesting level
+(define nesting-level -1)
+
+
 (define (make-table)
+  (set! offset 0)
+  (set! nesting-level (+ nesting-level 1))
   (set! table-list (append (list '()) table-list)))
 
-(define (destroy-table)
+(define (pop-table)
+  (set! nesting-level (- nesting-level 1))
   (set! table-list (cdr table-list)))
 
 (define (insert-symbol symbol)
   (let ((current-table (car table-list)))
     (set! table-list
-          (cons (cons symbol current-table) (cdr table-list)))))
+          (cons (cons (append symbol offset) current-table) (cdr table-list))))
+  (set! offset (+ offset (cadddr symbol))))
 
 (define (lookup-symbol symbol)
   (define (find val lst)
@@ -88,6 +115,51 @@
   (_lookup-symbol symbol table-list))
 
 
+
+;;---------------------------------------------------------;;
+;;                                                         ;;
+;; -- Pascal Operatives Translations --                    ;;
+;;                                                         ;;
+;; The below functions provide translations for micro      ;;
+;; pascal expressions to micro-machine byte code.          ;;
+;;                                                         ;;
+;;---------------------------------------------------------;;
+
+;; string holding the translated program
+(define prog "")
+
+;; holding cell for current stack offset
+(define offset 0)
+
+;; add an instruction to the program
+(define (addprog instruction)
+  (set! prog
+        (cond ((list? instruction)
+               (string-append prog (string-join instruction " ")))
+              (else
+               (string-append prog (string-append instruction "\n"))))))
+
+;; initialize the stack
+(define (write-init)
+  (addprog "store D0 SP")
+  (addprog "add SP 4 SP")
+  (addprog "load D0 SP"))
+
+;; reserve space on the stack for static variables,
+;; and fill these slots from the symbol table
+(define (write-static-vars)
+  (let ((tsize (reduce + 0 (map cadddr (car table-list)))))
+    (addprog (list "add SP" (number->string tsize) "SP"))))
+
+
+
+
+;; FOR DEBUG
+(define (display-prog)
+  (format #t "~a~%" prog))
+
+(define (display-table)
+  (format #t "~a~%" table-list))
 
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
