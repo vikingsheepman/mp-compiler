@@ -6,7 +6,7 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 3: Semantic-Analyzer                              ;;
 ;;                                                         ;;
-;; Last Modified: 2014-03-15                               ;;
+;; Last Modified: 2014-04-08                               ;;
 ;;                                                         ;;
 ;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
@@ -25,18 +25,53 @@
 (define-module (semantic-analyzer)
   #:use-module (srfi srfi-1)
   #:export (
+            ;; utilities
+            write-il-file
+            display-prog
+            
             ;; symbol table functions
             make-table
             pop-table
             insert-symbol
+            insert-proc
             lookup-symbol
 
             ;; semantic functions
-            write-init
-            write-static-vars
+            write-jmp-to-main
+            write-label
+            write-proc-setup
+            write-call
+            write-proc-clean
+            write-return
+            
+            write-read
+            write-write
+            write-wrtln
 
-            ;;debug
-            display-prog
+            write-negop
+            write-addop
+            write-subop
+            write-mulop
+            write-divop
+            write-modop
+            
+            write-fnegop
+            write-faddop            
+            write-fsubop
+            write-fmulop
+            write-fdivop
+            
+            write-andop
+            write-orop
+            write-notop
+            
+            write-push val
+            write-pop val
+            
+            write-var-space
+            write-terminate
+           
+            ;; for debuging
             display-table
             ))
 
@@ -68,8 +103,22 @@
 ;; holding cell for current stack offset
 (define offset 0)
 
+;; holding cell for current available lable
+(define label 0)
+
+;; alist that holds data type sizes
+;; (does not include string)
+(define type-size '(("int" . 4)
+                    ("float" . 8)
+                    ("bool" . 1)))
+
 ;; holding cell for current nesting level
 (define nesting-level -1)
+
+;; write a unique label
+(define current-label -1)
+(define (get-label)
+  (string-append "L" (number->string (+ current-label 1))))
 
 
 (define (make-table)
@@ -84,10 +133,23 @@
 (define (insert-symbol symbol)
   (let ((current-table (car table-list)))
     (set! table-list
-          (cons (cons (append symbol offset) current-table) (cdr table-list))))
-  (set! offset (+ offset (cadddr symbol))))
+          (cons (cons (append symbol (list offset)) current-table) (cdr table-list))))
+  (set! offset (+ offset (assoc-ref type-size (caddr symbol)))))
+
+(define (insert-proc proc)
+  (let ((current-table (car table-list)))
+    (set! table-list
+          (cons
+           (cons
+            (append
+             (append proc
+                     (list "null"))
+             (list (get-label)))
+            current-table)
+           (cdr table-list)))))
 
 (define (lookup-symbol symbol)
+  (define level 0)
   (define (find val lst)
     (cond ((eq? (cdr lst) '())
            (if (string=? (caar lst) val)
@@ -96,8 +158,7 @@
           (else
            (if (string=? (caar lst) val)
                (car lst)
-               (find val (cdr lst))))))
-  
+               (find val (cdr lst))))))  
   (define (_lookup-symbol symbol table)
     (let ((current-table (car table)))
       (let ((symbol-found? (find symbol current-table)))
@@ -111,8 +172,11 @@
                (if (eq? symbol-found? '())
                    (_lookup-symbol symbol (cdr table))
                    symbol-found?))))))
- 
   (_lookup-symbol symbol table-list))
+
+;; return symbol offset
+(define (get-offset symbol)
+  (cadddr symbol))
 
 
 
@@ -125,41 +189,184 @@
 ;;                                                         ;;
 ;;---------------------------------------------------------;;
 
-;; string holding the translated program
+
+;;-- UTILS --
+
+;; string holding the translated program in string format
 (define prog "")
 
-;; holding cell for current stack offset
-(define offset 0)
+;; gets the register of the current scope
+(define (get-reg)
+  (string-join (list "D" (number->string nesting-level))
+               ""))
+
+;; gets the register of the next scope
+(define (get-reg+1)
+  (string-join (list "D" (number->string (+ nesting-level 1)))
+               ""))
 
 ;; add an instruction to the program
 (define (addprog instruction)
   (set! prog
         (cond ((list? instruction)
-               (string-append prog (string-join instruction " ")))
+               (string-append prog
+                              (string-append (string-join instruction " ")
+                                             "\n")))
               (else
                (string-append prog (string-append instruction "\n"))))))
 
-;; initialize the stack
-(define (write-init)
-  (addprog "store D0 SP")
-  (addprog "add SP 4 SP")
-  (addprog "load D0 SP"))
-
-;; reserve space on the stack for static variables,
-;; and fill these slots from the symbol table
-(define (write-static-vars)
-  (let ((tsize (reduce + 0 (map cadddr (car table-list)))))
-    (addprog (list "add SP" (number->string tsize) "SP"))))
 
 
 
+;;-- TRANSLATED CODE --
 
-;; FOR DEBUG
+;; jump to main -- first line in any program
+(define (write-jmp-to-main)
+  (addprog "br MAIN"))
+
+;; operations
+(define (write-negop)
+  (addprog "negs"))
+
+(define (write-addop)
+  (addprog "adds"))
+
+(define (write-subop)
+  (addprog "subs"))
+
+(define (write-mulop)
+  (addprog "muls"))
+
+(define (write-divop)
+  (addprog "divs"))
+
+(define (write-modop)
+  (addprog "mods"))
+
+(define (write-fnegop)
+  (addprog "negsf"))
+
+(define (write-faddop)
+  (addprog "addsf"))
+
+(define (write-fsubop)
+  (addprog "subsf"))
+
+(define (write-fmulop)
+  (addprog "mulsf"))
+
+(define (write-fdivop)
+  (addprog "divsf"))
+
+(define (write-andop)
+  (addprog "ands"))
+
+(define (write-orop)
+  (addprog "ors"))
+
+(define (write-notop)
+  (addprog "nots"))
+
+;; define push
+(define (write-push val)
+  (addprog (list "push"
+                 val)))
+
+;; define pop
+(define (write-pop val)
+  (addprog (list "pop"
+                 val)))
+
+;; write code for read statement
+(define (write-read params)
+  (define (read-val val)
+    (addprog (list "rd"
+                   (string-join
+                    (list (number->string (get-offset (lookup-symbol val)))
+                          "("
+                          "D0"
+                          ")")
+                    ""))))
+  (map read-val params))
+
+;; write code for write statement
+(define (write-write)
+  (addprog "wrts"))
+
+;; write writeln code
+(define (write-wrtln)
+  (addprog "wrtln #\"\""))
+
+;; reserve space for vars on stack
+(define (write-var-space)
+  (let ((tsize (+ (reduce + 0 (map cadddr (remove (lambda (x)
+                                                    (eq? (cadddr x) "null"))
+                                                  (car table-list))))
+                  (cadddr (caar table-list)))))
+    (addprog (list "add"
+                   (string-append "#" (number->string tsize))
+                   "SP SP"))))
+
+;; define steps to setup a call
+(define (write-proc-setup)
+  (addprog "add #8 SP SP")
+  (addprog (list "mov"
+                 (get-reg+1)
+                 "-4(SP)"))
+  (addprog (list "mov SP"
+                 (get-reg+1))))
+
+;; define what should hapen at
+;; begining of function call
+(define (write-proc-head)
+  (addprog (string-append "pop"
+                          (string-join (list "-8("
+                                             (get-reg)
+                                             ")") ""))))
+
+;; write a label
+(define (write-label proc)
+  (if (string=? proc "MAIN")
+      (addprog "MAIN:")
+      (addprog (string-append (list-ref (lookup-symbol proc) 4)
+                              ":"))))
+
+;; cleanup a call
+(define (write-proc-clean)
+  (addprog (list "mov"
+                 (get-reg)
+                 "SP"))
+  (addprog (list "pop"
+                 (get-reg))))
+
+;; write return
+(define (write-return)
+  (addprog "ret"))
+
+;; write call
+(define (write-call proc)
+  (addprog (string-append "call "
+                          (list-ref (lookup-symbol proc) 4))))
+
+
+;; terminate program
+(define (write-terminate)
+  (addprog "hlt"))
+
+
+
+
+;;-- UTILS --
+
 (define (display-prog)
-  (format #t "~a~%" prog))
+  (format #t "~%~a~%" prog))
 
 (define (display-table)
-  (format #t "~a~%" table-list))
+  (format #t "~%~a~%" table-list))
+
+(define (write-il-file)
+  (with-output-to-file "out.il"
+    (lambda () (display-prog))))
 
 ;;---------------------------------------------------------;;
 ;;                                                         ;;

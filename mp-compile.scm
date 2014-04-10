@@ -6,7 +6,7 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 2: Parser / Driver                                ;;
 ;;                                                         ;;
-;; Last Modified: 2014-03-05                               ;;
+;; Last Modified: 2014-04-08                               ;;
 ;;                                                         ;;
 ;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
@@ -63,7 +63,7 @@
 
 ;; check if expected token is found
 (define (expect-token expected token)
-  (cond ((string=? (car token) expected) '())
+  (cond ((string=? (car token) expected) (cadr token))
         (else (token-error expected token)
               (exit))))
 
@@ -78,7 +78,7 @@
   (format #t "~%Micro-Pascal Compiler~%")
   (format #t "Version: 1.0~%")
   (format #t "Author: Killian Smith~%")
-  (format #t "Last Modified: March 2015~%~%"))
+  (format #t "Last Modified: April 2014~%~%"))
 
 
 
@@ -104,13 +104,17 @@
 
 ;; <system-goal> -> <program> . EOF
 (define (system-goal)
-  ;; setup output bytecode
-  (write-init)
+  (write-jmp-to-main)
 
   ;; start program parse
   (program)
   (expect-token "mp-eof" (get-token))
-  (format #t "The program has parsed successfully!~%~%"))
+
+  ;; write to terminate program
+  (write-terminate)
+  
+  (display-prog)
+  (format #t "~%The program has compiled successfully!~%~%"))
 
 
 ;; <program> -> <program-heading> . mp-scolon . <block> . mp-period
@@ -118,12 +122,15 @@
   ;-- construct new symbol table (begin scope)
   ;-- this will be the root level scope
   (make-table)
+  
   ;-- grammar rule
   (program-heading)
   (expect-token "mp-scolon" (get-token))
-  (block)
+  (block "MAIN")
+  
   ;-- pop the symbol table (end of scope)
   (pop-table)
+  
   ;-- finish grammar rule
   (expect-token "mp-period" (get-token)))
 
@@ -136,10 +143,17 @@
 
 ;; <block> -> <variable-declaration-part> . <procedure-and-function-declaration-part>
 ;;            . <statement-part>
-(define (block)
+(define (block label)
   (variable-declaration-part)
   (procedure-and-function-declaration-part)
-  (statement-part))
+  
+  ;; write label
+  (write-label label)
+  (write-var-space)
+  
+  (statement-part)
+  ;; cleanup the call
+  (write-proc-clean))
 
 
 ;; <variable-declaration-part> -> mp-var . <variable-declaration> . mp-scolon
@@ -173,13 +187,8 @@
     (expect-token "mp-colon" (get-token))
     (let ((var-type (type)))
       (map (lambda (id)
-             (insert-symbol '(id "var" (car var-type) (cadr var-type))))
-           id-list)))
-  
-  ;; semantic call to allocate var definitions to stack
-  (write-static-vars)
-  
-  (display-table))
+             (insert-symbol (list id "var" var-type)))
+           id-list))))
 
 
 ;; <type> -> mp-integer
@@ -190,10 +199,10 @@
   (let ((next-token (peek-token)))
     ;; there is no 'char' type in given grammar
     ;; returns tuple of type and size of type
-    (cond ((string=? (car next-token) "mp-integer") (get-token) '("int" 4))
-          ((string=? (car next-token) "mp-float") (get-token) '("float" 8))
-          ((string=? (car next-token) "mp-string") (get-token) '("string" '()))
-          ((string=? (car next-token) "mp-boolean") (get-token) '("bool" 1))
+    (cond ((string=? (car next-token) "mp-integer") (get-token) "int")
+          ((string=? (car next-token) "mp-float") (get-token) "float")
+          ((string=? (car next-token) "mp-string") (get-token) "string")
+          ((string=? (car next-token) "mp-boolean") (get-token) "bool")
           (else (token-error "type" next-token)
                 (exit)))))
 
@@ -208,6 +217,7 @@
     (cond ((string=? (car next-token) "mp-procedure")
            (get-token)
            (procedure-declaration)
+           (write-return)
            (procedure-and-function-declaration-part))
           ((string=? (car next-token) "mp-function")
            (get-token)
@@ -218,12 +228,11 @@
 
 ;; <procedure-declaration> -> <procedure-heading> . mp-scolon . <block> . mp-colon
 (define (procedure-declaration)
-  ;-- construct new symbol table (begin scope)
-  (make-table)
-  ;-- grammar rule
-  (procedure-heading)
-  (expect-token "mp-scolon" (get-token))
-  (block)
+  (let ((proc (procedure-heading)))
+    (expect-token "mp-scolon" (get-token))
+    ;-- construct new symbol table (begin scope)
+    (make-table)
+    (block proc))
   ;-- pop the symbol table (end of scope)
   (pop-table)
   ;-- finish grammar rule
@@ -247,8 +256,10 @@
 ;; <procedure-heading> -> mp-procedure . <procedure-identifier>
 ;;                        . <optional-formal-parameter-list>
 (define (procedure-heading)
-  (procedure-identifier)
-  (optional-formal-parameter-list))
+  (let ((proc (procedure-identifier)))
+    (insert-proc (list proc "procedure" ""))
+    (optional-formal-parameter-list)
+    proc))
 
 
 ;; <function-heading> -> mp-function . <function-identifier>
@@ -302,16 +313,20 @@
 
 ;; <value-parameter-section> -> <identifier-list> . mp-colon . <type>
 (define (value-parameter-section)
-  (identifier-list)
-  (expect-token "mp-colon" (get-token))
-  (type))
+  (let ((id-list (identifier-list)))
+    (expect-token "mp-colon" (get-token))
+    (let ((t (type)))
+      (map (lambda (x) (insert-symbol (list x "var" t))) id-list))))
 
 
 ;; <variable-parameter-section> -> mp-var . <identifier-list> . mp-colon . <type>
 (define (variable-parameter-section)
-  (identifier-list)
-  (expect-token "mp-colon" (get-token))
-  (type))
+  (let ((id-list (identifier-list)))
+    (expect-token "mp-colon" (get-token))
+    (let ((var-type (type)))
+      (map (lambda (id)
+             (insert-symbol (list id "var" var-type)))
+           id-list))))
 
 
 ;; <statement-part> -> <compound-statement> 
@@ -360,15 +375,23 @@
           ((string=? (car next-token) "mp-read") (get-token) (read-statement))
           ((string=? (car next-token) "mp-readln") (get-token) (read-statement))
           ((string=? (car next-token) "mp-write") (get-token) (write-statement))
-          ((string=? (car next-token) "mp-writeln") (get-token) eps)
+          ((string=? (car next-token) "mp-writeln") (get-token) (write-wrtln) eps)
           ((string=? (car next-token) "mp-if") (get-token) (if-statement))
           ((string=? (car next-token) "mp-while") (get-token) (while-statement))
           ((string=? (car next-token) "mp-repeat") (get-token) (repeat-statement))
           ((string=? (car next-token) "mp-for") (get-token) (for-statement))
           ((string=? (car next-token) "mp-identifier")
            (set! tmp-token (get-token))
-           (cond ((string=? (car (peek-token)) "mp-assign") (get-token) (assignment-statement))
-                 (else (backtrack-token tmp-token) (procedure-statement))))
+           (cond ((string=? (car (peek-token)) "mp-assign")
+                  (get-token)
+                  (assignment-statement)
+                  (write-pop (string-join
+                              (list (number->string (cadddr (lookup-symbol (cadr tmp-token))))
+                                    "("
+                                    "D0"
+                                    ")")
+                              "")))
+                 (else (backtrack-token tmp-token) (write-call (procedure-statement)))))
           (else (empty-statement)))))
 
 
@@ -380,23 +403,29 @@
 ;;                     . <read-parameter-tail> . mp-rparen
 (define (read-statement)
   (expect-token "mp-lparen" (get-token))
-  (read-parameter)
-  (read-parameter-tail)
+  ;; collect the parameter list
+  (let ((params (list '())))
+    (read-parameter params)
+    (read-parameter-tail params)
+    ;; write read code
+    (write-read (car params)))  
   (expect-token "mp-rparen" (get-token)))
 
 
 ;; <read-parameter-tail> -> mp-comma . <read-parameter> . <read-parameter-tail>
 ;;                       -> eps
-(define (read-parameter-tail)
+(define (read-parameter-tail params)
   (cond ((string=? (car (peek-token)) "mp-comma")
          (get-token)
-         (read-parameter)
-         (read-parameter-tail))
-        (else eps)))
+         (read-parameter params)
+         (read-parameter-tail params))
+        (else params)))
 
 
 ;; <read-parameter> -> <variable-identifier>
-(define (read-parameter) (variable-identifier))
+(define (read-parameter params)
+  (let ((id (variable-identifier)))
+    (set-car! params (append (car params) (list id)))))
 
 
 ;; <write-statement> -> mp-write . mp-lparen . <write-parameter>
@@ -422,7 +451,8 @@
 
 ;; <write-parameter> -> <ordinal-expression>
 (define (write-parameter)
-  (ordinal-expression))
+  (ordinal-expression)
+  (write-write))
 
 
 ;; <assignment-statement> -> <variable-identifier> . mp-assignment . <expression>
@@ -501,8 +531,10 @@
 
 ;; <procedure-statement> -> <procedure-identifier> . <optional-actual-parameter-list>
 (define (procedure-statement)
-  (procedure-identifier)
-  (optional-actual-parameter-list))
+  (let ((proc (procedure-identifier)))
+    (write-proc-setup)
+    (optional-actual-parameter-list)
+    proc))
 
 
 ;; <optional-actual-parameter-list> -> mp-lparen . <actual-parameter> . <actual-parameter-tail>
@@ -575,21 +607,29 @@
 
 ;; <simple-expression> -> <optional-sign> . <term> . <term-tail>
 (define (simple-expression)
-  (optional-sign)
-  (term)
-  (term-tail))
+  (let ((is-neg #f))
+    (if (string=? (optional-sign) "neg")
+        (set! is-neg #t)
+        '())
+    (term)
+    (term-tail)
+    (if (eq? is-neg #t)
+        (write-negop)
+        '())))
 
 
 ;; <term-tail> -> <adding-operator> . <term> . <term-tail>
 ;;             -> eps
 (define (term-tail)
-  (let ((next-token (peek-token)))
-    (cond ((or (string=? (car next-token) "mp-plus")
-               (string=? (car next-token) "mp-minus")
-               (string=? (car next-token) "mp-or"))
-           (adding-operator)
-           (term)
-           (term-tail))
+  (let ((next-token (peek-token))
+        (operation (lambda (op) (begin
+                                  (adding-operator)
+                                  (term)
+                                  (op)
+                                  (term-tail)))))
+    (cond ((string=? (car next-token) "mp-plus") (operation (lambda () (write-addop))))
+          ((string=? (car next-token) "mp-minus") (operation (lambda () (write-subop))))
+          ((string=? (car next-token) "mp-or") (operation (lambda () (write-orop))))
           (else eps))))
 
 
@@ -598,8 +638,8 @@
 ;;                 -> eps
 (define (optional-sign)
   (let ((next-token (peek-token)))
-    (cond ((string=? (car next-token) "mp-plus") (get-token) eps)
-          ((string=? (car next-token) "mp-minus") (get-token) eps)
+    (cond ((string=? (car next-token) "mp-plus") (get-token) "pos")
+          ((string=? (car next-token) "mp-minus") (get-token) "neg")
           (else eps))))
 
 
@@ -624,15 +664,17 @@
 ;; <factor-tail> -> <multiplying-operator> . <factor> . <factor-tail>
 ;;               -> eps
 (define (factor-tail)
-  (let ((next-token (peek-token)))
-    (cond ((or (string=? (car next-token) "mp-times")
-               (string=? (car next-token) "mp-float-divide")
-               (string=? (car next-token) "mp-div")
-               (string=? (car next-token) "mp-mod")
-               (string=? (car next-token) "mp-and"))
-           (multiplying-operator)
-           (factor)
-           (factor-tail))
+  (let ((next-token (peek-token))
+        (operation (lambda (op) (begin
+                                  (multiplying-operator)
+                                  (factor)
+                                  (op)
+                                  (factor-tail)))))
+    (cond ((string=? (car next-token) "mp-times") (operation (lambda () (write-mulop))))
+          ((string=? (car next-token) "mp-float-divide") (operation (lambda () (write-fdivop))))
+          ((string=? (car next-token) "mp-div")(operation (lambda () (write-divop))))
+          ((string=? (car next-token) "mp-mod") (operation (lambda () (write-modop))))
+          ((string=? (car next-token) "mp-and") (operation (lambda () (write-andop))))
           (else eps))))
   
   
@@ -662,22 +704,36 @@
 ;;          -> <function-identifier> . <optional-actual-parameter-list>
 (define (factor)
   (let ((next-token (peek-token)))
-    (cond ((or (string=? (car next-token) "mp-integer-lit")
-               (string=? (car next-token) "mp-float-lit")
-               (string=? (car next-token) "mp-string-lit")
-               (string=? (car next-token) "mp-true")
-               (string=? (car next-token) "mp-false"))
-           (get-token) eps)
+    (cond ((string=? (car next-token) "mp-integer-lit") (write-push (string-append "#" (cadr (get-token)))))
+          ((string=? (car next-token) "mp-float-lit") (write-push (string-append "#" (cadr (get-token)))))
+          ((string=? (car next-token) "mp-string-lit")
+           (write-push (string-append "#"
+                                      (string-join
+                                       (list "\""
+                                             (substring (cadr (peek-token))
+                                                        1
+                                                        (- (string-length (cadr (get-token))) 2))
+                                             "\"")
+                                       ""))))
+          ((string=? (car next-token) "mp-true") (cadr (get-token)))
+          ((string=? (car next-token) "mp-false") (cadr (get-token)))
           ((string=? (car next-token) "mp-not")
            (get-token)
-           (factor))
+           (factor)
+           (write-notop))
           ((string=? (car next-token) "mp-lparen")
            (get-token)
            (expression)
            (expect-token "mp-rparen" (get-token )))
           ((string=? (car next-token) "mp-identifier")
-           (function-identifier)
-           (optional-actual-parameter-list))
+           (write-push (string-join
+                        (list (number->string (cadddr (lookup-symbol (function-identifier))))
+                              "("
+                              "D0"
+                              ")")
+                        "")))
+           ;(lookup-symbol (cadr (function-identifier)))  <- work here for A level
+           ;(optional-actual-parameter-list))
           (else (token-error "factor" next-token)
                 (exit)))))
 
@@ -714,18 +770,18 @@
 
 ;; <identifier-list> -> mp-identifier . <identifier-tail>
 (define (identifier-list)
-  (let ((token (get-token))
-        (tmp-id-list '()))
+  (define tmp-id-list (list '()))
+  (let ((token (get-token)))
     (expect-token "mp-identifier" token)
 
     ;; append the identifier to the temperary
     ;; identifier table holding list
-    (append tmp-id-list (cadr token))
+    (set-car! tmp-id-list (append (car tmp-id-list) (list (cadr token))))
 
     (identifier-tail tmp-id-list)
 
     ;; return the list of identifiers
-    tmp-id-list))
+    (car tmp-id-list)))
 
 
 ;; <identifier-tail> -> mp-comma . <identifier> . <identifier-tail>
@@ -734,14 +790,15 @@
   (let ((next-token (peek-token)))
     (cond ((string=? (car next-token) "mp-comma")
            (get-token)
-           (expect-token "mp-identifier" (get-token))
+           (let ((token (peek-token)))
+             (expect-token "mp-identifier" (get-token))
 
-           ;; append the identifier to the temperary
-           ;; identifier table holding list
-           (append tmp-id-list (cadr next-token))
+             ;; append the identifier to the temperary
+             ;; identifier table holding list
+             (set-car! tmp-id-list (append (car tmp-id-list) (list (cadr token)))))
 
            (identifier-tail tmp-id-list))
-          (else eps))))
+          (else tmp-id-list))))
 
 
 
@@ -760,6 +817,7 @@
   (intro-msg)
   (format #t "Compiling Mico-Pascal Program -->~%~%~%")
   (system-goal)
+  (write-il-file)
   (format #t "~%Finished Process~%")
   (format #t "~%"))(main)
 
