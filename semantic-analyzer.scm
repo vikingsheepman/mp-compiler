@@ -143,7 +143,7 @@
            (cons
             (append
              (append proc
-                     (list "null"))
+                     (list -1 -1))
              (list (get-label)))
             current-table)
            (cdr table-list)))))
@@ -153,11 +153,13 @@
   (define (find val lst)
     (cond ((eq? (cdr lst) '())
            (if (string=? (caar lst) val)
-               (car lst)
-                '()))
+               (list (car lst) level)
+               (begin
+                 (set! level (+ level 1))
+                 '())))
           (else
            (if (string=? (caar lst) val)
-               (car lst)
+               (list (car lst) level)
                (find val (cdr lst))))))  
   (define (_lookup-symbol symbol table)
     (let ((current-table (car table)))
@@ -197,12 +199,12 @@
 
 ;; gets the register of the current scope
 (define (get-reg)
-  (string-join (list "D" (number->string nesting-level))
+  (string-join (list "D" (number->string (- (length table-list) 1)))
                ""))
 
 ;; gets the register of the next scope
 (define (get-reg+1)
-  (string-join (list "D" (number->string (+ nesting-level 1)))
+  (string-join (list "D" (number->string (length table-list)))
                ""))
 
 ;; add an instruction to the program
@@ -280,13 +282,15 @@
 ;; write code for read statement
 (define (write-read params)
   (define (read-val val)
-    (addprog (list "rd"
-                   (string-join
-                    (list (number->string (get-offset (lookup-symbol val)))
-                          "("
-                          "D0"
-                          ")")
-                    ""))))
+    (let ((sym (lookup-symbol val)))
+      (addprog (list "rd"
+                     (string-join
+                      (list (number->string (get-offset (car sym)))
+                            "("
+                            "D"
+                            (cadr sym)
+                            ")")
+                      "")))))
   (map read-val params))
 
 ;; write code for write statement
@@ -299,13 +303,14 @@
 
 ;; reserve space for vars on stack
 (define (write-var-space)
-  (let ((tsize (+ (reduce + 0 (map cadddr (remove (lambda (x)
-                                                    (eq? (cadddr x) "null"))
-                                                  (car table-list))))
-                  (cadddr (caar table-list)))))
-    (addprog (list "add"
-                   (string-append "#" (number->string tsize))
-                   "SP SP"))))
+  (let ((last-var (car (remove (lambda (x)
+                                    (eq? (cadddr x) -1))
+                                  (car table-list)))))
+    (let ((tsize (+ (cadddr last-var)
+                    (assoc-ref type-size (caddr last-var)))))
+      (addprog (list "add"
+                     (string-append "#" (number->string tsize))
+                     "SP SP")))))
 
 ;; define steps to setup a call
 (define (write-proc-setup)
@@ -328,7 +333,7 @@
 (define (write-label proc)
   (if (string=? proc "MAIN")
       (addprog "MAIN:")
-      (addprog (string-append (list-ref (lookup-symbol proc) 4)
+      (addprog (string-append (list-ref (car (lookup-symbol proc)) 5)
                               ":"))))
 
 ;; cleanup a call
@@ -346,7 +351,7 @@
 ;; write call
 (define (write-call proc)
   (addprog (string-append "call "
-                          (list-ref (lookup-symbol proc) 4))))
+                          (list-ref (car (lookup-symbol proc)) 5))))
 
 
 ;; terminate program

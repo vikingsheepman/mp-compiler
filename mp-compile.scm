@@ -146,7 +146,7 @@
 (define (block label)
   (variable-declaration-part)
   (procedure-and-function-declaration-part)
-  
+ 
   ;; write label
   (write-label label)
   (write-var-space)
@@ -230,8 +230,6 @@
 (define (procedure-declaration)
   (let ((proc (procedure-heading)))
     (expect-token "mp-scolon" (get-token))
-    ;-- construct new symbol table (begin scope)
-    (make-table)
     (block proc))
   ;-- pop the symbol table (end of scope)
   (pop-table)
@@ -258,6 +256,7 @@
 (define (procedure-heading)
   (let ((proc (procedure-identifier)))
     (insert-proc (list proc "procedure" ""))
+    (make-table)
     (optional-formal-parameter-list)
     proc))
 
@@ -386,7 +385,7 @@
                   (get-token)
                   (assignment-statement)
                   (write-pop (string-join
-                              (list (number->string (cadddr (lookup-symbol (cadr tmp-token))))
+                              (list (number->string (cadddr (car (lookup-symbol (cadr tmp-token)))))
                                     "("
                                     "D0"
                                     ")")
@@ -727,7 +726,7 @@
            (expect-token "mp-rparen" (get-token )))
           ((string=? (car next-token) "mp-identifier")
            (write-push (string-join
-                        (list (number->string (cadddr (lookup-symbol (function-identifier))))
+                        (list (number->string (cadddr (car (lookup-symbol (function-identifier)))))
                               "("
                               "D0"
                               ")")
