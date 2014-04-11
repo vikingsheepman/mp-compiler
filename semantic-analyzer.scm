@@ -28,6 +28,7 @@
             ;; utilities
             write-il-file
             display-prog
+            get-current-table
             
             ;; symbol table functions
             make-table
@@ -38,9 +39,11 @@
 
             ;; semantic functions
             write-jmp-to-main
+            write-prepare-main
             write-label
             write-proc-setup
             write-call
+            write-proc-head
             write-proc-clean
             write-return
             
@@ -68,7 +71,7 @@
             write-push val
             write-pop val
             
-            write-var-space
+            write-add-var-space
             write-terminate
            
             ;; for debuging
@@ -103,9 +106,6 @@
 ;; holding cell for current stack offset
 (define offset 0)
 
-;; holding cell for current available lable
-(define label 0)
-
 ;; alist that holds data type sizes
 ;; (does not include string)
 (define type-size '(("int" . 4)
@@ -116,7 +116,7 @@
 (define nesting-level -1)
 
 ;; write a unique label
-(define current-label -1)
+(define current-label 0)
 (define (get-label)
   (string-append "L" (number->string (+ current-label 1))))
 
@@ -149,31 +149,31 @@
            (cdr table-list)))))
 
 (define (lookup-symbol symbol)
-  (define level 0)
+  (define level (- (length table-list) 1))
   (define (find val lst)
     (cond ((eq? (cdr lst) '())
            (if (string=? (caar lst) val)
                (list (car lst) level)
-               (begin
-                 (set! level (+ level 1))
-                 '())))
+               '()))
           (else
            (if (string=? (caar lst) val)
                (list (car lst) level)
-               (find val (cdr lst))))))  
+               (find val (cdr lst))))))
   (define (_lookup-symbol symbol table)
     (let ((current-table (car table)))
-      (let ((symbol-found? (find symbol current-table)))
+      (let ((symbol-found (find symbol current-table)))
         (cond ((eq? (cdr table) '())
-               (if (eq? symbol-found? '())
+               (if (eq? symbol-found '())
                    (begin
                      (format #t "~%symbol '~a' is undeclared~%" symbol)
                      '())
-                   symbol-found?))
+                   symbol-found))
               (else
-               (if (eq? symbol-found? '())
-                   (_lookup-symbol symbol (cdr table))
-                   symbol-found?))))))
+               (if (eq? symbol-found '())
+                   (begin
+                     (set! level (- level 1))
+                     (_lookup-symbol symbol (cdr table)))
+                   symbol-found))))))
   (_lookup-symbol symbol table-list))
 
 ;; return symbol offset
@@ -198,13 +198,19 @@
 (define prog "")
 
 ;; gets the register of the current scope
-(define (get-reg)
+(define (get-cur-reg)
   (string-join (list "D" (number->string (- (length table-list) 1)))
                ""))
 
 ;; gets the register of the next scope
 (define (get-reg+1)
   (string-join (list "D" (number->string (length table-list)))
+               ""))
+
+;; get location of symbol
+(define (get-sym-reg sym)
+  (string-join (list "D"
+                     (number->string (lookup-symbol)))
                ""))
 
 ;; add an instruction to the program
@@ -224,7 +230,7 @@
 
 ;; jump to main -- first line in any program
 (define (write-jmp-to-main)
-  (addprog "br MAIN"))
+  (addprog "br L0"))
 
 ;; operations
 (define (write-negop)
@@ -301,16 +307,16 @@
 (define (write-wrtln)
   (addprog "wrtln #\"\""))
 
-;; reserve space for vars on stack
-(define (write-var-space)
-  (let ((last-var (car (remove (lambda (x)
-                                    (eq? (cadddr x) -1))
-                                  (car table-list)))))
-    (let ((tsize (+ (cadddr last-var)
-                    (assoc-ref type-size (caddr last-var)))))
-      (addprog (list "add"
-                     (string-append "#" (number->string tsize))
-                     "SP SP")))))
+;; push a var onto stack
+(define (write-add-var-space vars)
+  (addprog
+   (string-join (list "add #"
+                      (number->string
+                       (reduce + 0
+                               (map (lambda (x) (assoc-ref type-size x))
+                                    (map caddr vars))))
+                      " SP SP")
+                "")))
 
 ;; define steps to setup a call
 (define (write-proc-setup)
@@ -321,28 +327,34 @@
   (addprog (list "mov SP"
                  (get-reg+1))))
 
+;;prepare main
+(define (write-prepare-main)
+  (addprog "add #4 SP SP")
+  (addprog "mov D0 -4(SP)")
+  (addprog "mov SP D0"))
+         
 ;; define what should hapen at
 ;; begining of function call
 (define (write-proc-head)
-  (addprog (string-append "pop"
+  (addprog (string-append "pop "
                           (string-join (list "-8("
-                                             (get-reg)
+                                             (get-cur-reg)
                                              ")") ""))))
 
 ;; write a label
 (define (write-label proc)
-  (if (string=? proc "MAIN")
-      (addprog "MAIN:")
+  (if (string=? proc "L0")
+      (addprog "L0:")
       (addprog (string-append (list-ref (car (lookup-symbol proc)) 5)
                               ":"))))
 
 ;; cleanup a call
 (define (write-proc-clean)
   (addprog (list "mov"
-                 (get-reg)
+                 (get-cur-reg)
                  "SP"))
   (addprog (list "pop"
-                 (get-reg))))
+                 (get-cur-reg))))
 
 ;; write return
 (define (write-return)
@@ -362,6 +374,9 @@
 
 
 ;;-- UTILS --
+
+(define (get-current-table)
+  (car table-list))
 
 (define (display-prog)
   (format #t "~%~a~%" prog))
