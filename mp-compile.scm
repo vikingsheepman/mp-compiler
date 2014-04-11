@@ -126,7 +126,7 @@
   ;-- grammar rule
   (program-heading)
   (expect-token "mp-scolon" (get-token))
-  (block "MAIN")
+  (block "L0")
   
   ;-- pop the symbol table (end of scope)
   (pop-table)
@@ -145,11 +145,17 @@
 ;;            . <statement-part>
 (define (block label)
   (variable-declaration-part)
-  (procedure-and-function-declaration-part)
+  (let ((vars (get-current-table)))
+    (procedure-and-function-declaration-part)
  
-  ;; write label
-  (write-label label)
-  (write-var-space)
+    ;; write label
+    (write-label label)
+
+    (if (string=? label "L0")
+        (write-prepare-main)
+        (write-proc-head))
+    
+    (write-add-var-space vars))
   
   (statement-part)
   ;; cleanup the call
@@ -384,12 +390,14 @@
            (cond ((string=? (car (peek-token)) "mp-assign")
                   (get-token)
                   (assignment-statement)
-                  (write-pop (string-join
-                              (list (number->string (cadddr (car (lookup-symbol (cadr tmp-token)))))
-                                    "("
-                                    "D0"
-                                    ")")
-                              "")))
+                  (let ((sym (lookup-symbol (cadr tmp-token))))
+                    (write-pop (string-join
+                                (list (number->string (cadddr (car sym)))
+                                      "("
+                                      "D"
+                                      (number->string (cadr sym))
+                                      ")")
+                              ""))))
                  (else (backtrack-token tmp-token) (write-call (procedure-statement)))))
           (else (empty-statement)))))
 
