@@ -380,7 +380,10 @@
           ((string=? (car next-token) "mp-read") (get-token) (read-statement))
           ((string=? (car next-token) "mp-readln") (get-token) (read-statement))
           ((string=? (car next-token) "mp-write") (get-token) (write-statement))
-          ((string=? (car next-token) "mp-writeln") (get-token) (write-wrtln) eps)
+          ((string=? (car next-token) "mp-writeln") (get-token)
+                                                    (write-statement)
+                                                    (write-wrtln)
+                                                    eps)
           ((string=? (car next-token) "mp-if") (get-token) (if-statement))
           ((string=? (car next-token) "mp-while") (get-token) (while-statement))
           ((string=? (car next-token) "mp-repeat") (get-token) (repeat-statement))
@@ -471,16 +474,22 @@
 ;; <if-statement> -> mp-if . <boolean-expression> . mp-then
 ;;                   . <statement> . <optional-else-part>
 (define (if-statement)
-  (boolean-expression)
-  (expect-token "mp-then" (get-token))
-  (statement)
-  (optional-else-part))
+  (let ((else-label (get-label))
+        (end-label (get-label)))
+    (boolean-expression)
+    (write-jmp-neq else-label)
+    (expect-token "mp-then" (get-token))
+    (statement)
+    (write-jmp end-label)
+    (write-label-lit else-label)
+    (optional-else-part)
+    (write-label-lit end-label)))
 
 
 ;;<optional-else-part> -> mp-else . <statement>
 ;;                     -> eps
 (define (optional-else-part)
-  (cond ((string=? (car peek-token) "mp-else") (get-token) (statement))
+  (cond ((string=? (car (peek-token)) "mp-else") (get-token) (statement))
         (else eps)))
 
 
@@ -494,21 +503,67 @@
 
 ;; <while-statement> -> mp-while . <boolean-expression> . mp-do . <statement>
 (define (while-statement)
-  (boolean-expression)
-  (expect-token "mp-do" (get-token))
-  (statement))
+  (let ((loop-label (get-label))
+        (end-label (get-label)))
+    (write-label-lit loop-label)
+    (boolean-expression)
+    (write-jmp-neq end-label)
+    (expect-token "mp-do" (get-token))
+    (statement)
+    (write-jmp loop-label)
+    (write-label-lit end-label)))
 
 
 ;; <for-statement> -> mp-for . <control-variable> . mp-assigment . <initial-value>
 ;;                    . <step-value> . <final-value> . mp-do . <statement>
 (define (for-statement)
-  (control-variable)
-  (expect-token "mp-assignment" (get-token))
-  (initial-value)
-  (step-value)
-  (final-value)
-  (expect-token "mp-do" (get-token))
-  (statement))
+  (let ((loop-label (get-label))
+        (end-label (get-label))
+        (inc-op '())
+        (cmp-op '())
+        (control '())
+        (var '()))
+
+    (set! control (control-variable))
+    (expect-token "mp-assign" (get-token))
+    (initial-value)
+
+    (set! var (let ((sym (lookup-symbol control)))
+                (string-join
+                 (list (number->string (cadddr (car sym)))
+                       "("
+                       "D"
+                       (number->string (cadr sym))
+                       ")")
+                 "")))
+
+    (write-pop var)
+    (let ((step (step-value)))
+      (if (string=? step "to")
+          (begin
+            (set! cmp-op (lambda () (write-ltop)))
+            (set! inc-op (lambda () (write-addop))))
+          (begin
+            (set! cmp-op (lambda () (write-gtop)))
+            (set! inc-op (lambda () (write-subop))))))
+
+    (write-label-lit loop-label)
+    (final-value)
+    (write-push var) 
+    (cmp-op)
+    (write-jmp-eq end-label)
+
+    (expect-token "mp-do" (get-token))
+    (statement)
+
+    ;; increment or decrement
+    (write-push var)
+    (write-push "#1")
+    (inc-op)
+    (write-pop var)
+    
+    (write-jmp loop-label)
+    (write-label-lit end-label)))
 
 
 ;; <control-variable> -> <variable-identifier>
@@ -525,8 +580,8 @@
 ;;              -> mp-downto
 (define (step-value)
   (let ((next-token (get-token)))
-    (cond ((string=? (car next-token) "mp-to") eps)
-          ((string=? (car next-token) "mp-downto") eps)
+    (cond ((string=? (car next-token) "mp-to") "to")
+          ((string=? (car next-token) "mp-downto") "downto")
           (else (token-error "step-value" next-token)
                 (exit)))))
 
@@ -582,15 +637,17 @@
 ;; <optional-relation-part> -> <relational-operator> . <simple-expression>
 ;;                          -> eps
 (define (optional-relation-part)
-  (let ((next-token (peek-token)))
-    (cond ((or (string=? (car next-token) "mp-equal")
-               (string=? (car next-token) "mp-lthan")
-               (string=? (car next-token) "mp-gthan")
-               (string=? (car next-token) "mp-lequal")
-               (string=? (car next-token) "mp-gequal")
-               (string=? (car next-token) "mp-nequal"))
-           (relational-operator)
-           (simple-expression))
+  (let ((next-token (peek-token))
+          (operation (lambda (op) (begin
+                                    (relational-operator)
+                                    (simple-expression)
+                                    (op)))))
+    (cond ((string=? (car next-token) "mp-equal")  (operation (lambda () (write-eqop))))
+          ((string=? (car next-token) "mp-lthan")  (operation (lambda () (write-ltop))))
+          ((string=? (car next-token) "mp-gthan")  (operation (lambda () (write-gtop))))
+          ((string=? (car next-token) "mp-lequal") (operation (lambda () (write-leop))))
+          ((string=? (car next-token) "mp-gequal") (operation (lambda () (write-geop))))
+          ((string=? (car next-token) "mp-nequal") (operation (lambda () (write-neqop))))
           (else eps))))
 
 
@@ -716,11 +773,20 @@
           ((string=? (car next-token) "mp-string-lit")
            (write-push (string-append "#"
                                       (string-join
-                                       (list "\""
-                                             (substring (cadr (peek-token))
-                                                        1
-                                                        (- (string-length (cadr (get-token))) 2))
-                                             "\"")
+                                       (list
+                                        "\""
+                                        (string-join
+                                         (remove (lambda (x)
+                                                   (string=? x ""))
+                                                 (string-split
+                                                  (substring (cadr (peek-token))
+                                                             1
+                                                             (-
+                                                              (string-length (cadr (get-token)))
+                                                              1))
+                                                  #\'))
+                                         "'")
+                                        "\"")
                                        ""))))
           ((string=? (car next-token) "mp-true") (cadr (get-token)))
           ((string=? (car next-token) "mp-false") (cadr (get-token)))
@@ -733,14 +799,15 @@
            (expression)
            (expect-token "mp-rparen" (get-token )))
           ((string=? (car next-token) "mp-identifier")
-           (write-push (string-join
-                        (list (number->string (cadddr (car (lookup-symbol (function-identifier)))))
-                              "("
-                              "D0"
-                              ")")
-                        "")))
-           ;(lookup-symbol (cadr (function-identifier)))  <- work here for A level
-           ;(optional-actual-parameter-list))
+           (let ((sym (lookup-symbol (function-identifier))))
+             (write-push (string-join
+                          (list (number->string (cadddr (car sym)))
+                                "("
+                                "D"
+                                (number->string (cadr sym))
+                                ")")
+                          "")))
+           (optional-actual-parameter-list))
           (else (token-error "factor" next-token)
                 (exit)))))
 
@@ -823,6 +890,7 @@
   (init-scanner)
   (intro-msg)
   (format #t "Compiling Mico-Pascal Program -->~%~%~%")
+  ;(print-all-tokens)
   (system-goal)
   (write-il-file)
   (format #t "~%Finished Process~%")

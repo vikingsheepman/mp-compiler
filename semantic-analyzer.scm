@@ -40,7 +40,12 @@
             ;; semantic functions
             write-jmp-to-main
             write-prepare-main
+            write-jmp
+            write-jmp-eq
+            write-jmp-neq
+            get-label
             write-label
+            write-label-lit
             write-proc-setup
             write-call
             write-proc-head
@@ -63,7 +68,21 @@
             write-fsubop
             write-fmulop
             write-fdivop
-            
+
+            write-eqop
+            write-ltop
+            write-gtop
+            write-leop
+            write-geop
+            write-neqop
+
+            write-feqop
+            write-fltop
+            write-fgtop
+            write-fleop
+            write-fgeop
+            write-fneqop
+ 
             write-andop
             write-orop
             write-notop
@@ -108,8 +127,8 @@
 
 ;; alist that holds data type sizes
 ;; (does not include string)
-(define type-size '(("int" . 4)
-                    ("float" . 8)
+(define type-size '(("int" . 1)
+                    ("float" . 1)
                     ("bool" . 1)))
 
 ;; holding cell for current nesting level
@@ -118,8 +137,8 @@
 ;; write a unique label
 (define current-label 0)
 (define (get-label)
-  (string-append "L" (number->string (+ current-label 1))))
-
+  (set! current-label (+ current-label 1))
+  (string-append "L" (number->string current-label)))
 
 (define (make-table)
   (set! offset 0)
@@ -275,6 +294,42 @@
 (define (write-notop)
   (addprog "nots"))
 
+(define (write-eqop)
+  (addprog "cmpeqs"))
+
+(define (write-ltop)
+  (addprog "cmplts"))
+
+(define (write-gtop)
+  (addprog "cmpgts"))
+
+(define (write-leop)
+  (addprog "cmples"))
+
+(define (write-geop)
+  (addprog "cmpges"))
+
+(define (write-neqop)
+  (addprog "cmpnes"))
+
+(define (write-feqop)
+  (addprog "cmpeqsf"))
+
+(define (write-fltop)
+  (addprog "cmpltsf"))
+
+(define (write-fgtop)
+  (addprog "cmpgtsf"))
+
+(define (write-fleop)
+  (addprog "cmplesf"))
+
+(define (write-fgeop)
+  (addprog "cmpgesf"))
+
+(define (write-fneqop)
+  (addprog "cmpnesf"))
+
 ;; define push
 (define (write-push val)
   (addprog (list "push"
@@ -294,7 +349,7 @@
                       (list (number->string (get-offset (car sym)))
                             "("
                             "D"
-                            (cadr sym)
+                            (number->string (cadr sym))
                             ")")
                       "")))))
   (map read-val params))
@@ -320,33 +375,37 @@
 
 ;; define steps to setup a call
 (define (write-proc-setup)
-  (addprog "add #8 SP SP")
+  (addprog "add #2 SP SP")
   (addprog (list "mov"
                  (get-reg+1)
-                 "-4(SP)"))
+                 "-1(SP)"))
   (addprog (list "mov SP"
                  (get-reg+1))))
 
 ;;prepare main
 (define (write-prepare-main)
-  (addprog "add #4 SP SP")
-  (addprog "mov D0 -4(SP)")
+  (addprog "add #2 SP SP")
+  (addprog "mov D0 -1(SP)")
   (addprog "mov SP D0"))
          
 ;; define what should hapen at
 ;; begining of function call
 (define (write-proc-head)
   (addprog (string-append "pop "
-                          (string-join (list "-8("
+                          (string-join (list "-2("
                                              (get-cur-reg)
                                              ")") ""))))
 
-;; write a label
+;; write a label from variable
 (define (write-label proc)
   (if (string=? proc "L0")
       (addprog "L0:")
       (addprog (string-append (list-ref (car (lookup-symbol proc)) 5)
                               ":"))))
+
+;; write a label
+(define (write-label-lit lbl)
+  (addprog (string-append lbl ":")))
 
 ;; cleanup a call
 (define (write-proc-clean)
@@ -365,6 +424,21 @@
   (addprog (string-append "call "
                           (list-ref (car (lookup-symbol proc)) 5))))
 
+
+;; write branch if equal
+(define (write-jmp-eq lbl)
+  (addprog (list "brts"
+                 lbl)))
+
+;; write branch if not equal
+(define (write-jmp-neq lbl)
+  (addprog (list "brfs"
+                 lbl)))
+
+;; write jump to label
+(define (write-jmp lbl)
+  (addprog (list "br"
+                 lbl)))
 
 ;; terminate program
 (define (write-terminate)

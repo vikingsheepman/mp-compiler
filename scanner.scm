@@ -26,7 +26,13 @@
 
 (define-module (scanner)
   #:use-module (ice-9 regex)
-  #:export (init-scanner get-token peek-token backtrack-token))
+  #:export (init-scanner
+            get-token
+            peek-token
+            backtrack-token
+
+            ;; for debug
+            print-all-tokens))
 
 
 
@@ -154,8 +160,7 @@
      '("unclosed-str"    (lambda (x) (cond ((string=?      "'"            x)  "apos")
                                            (else                              "unclosed-str"))))
      '("apos"            (lambda (x) (cond ((string=?      "'"            x)  "unclosed-str")
-                                           (else                              ;(unread-string x fp)
-                                                                              "mp-string-lit"))))
+                                           (else                              "mp-string-lit"))))
      '("mp-string-lit"   (lambda (x)                                          "reject"))))
 
   (define colon-start-transitions-list
@@ -447,12 +452,19 @@
                                                               (last-token))))
                 
                 (else
-                 (cond ((member next-state final-states)      (set! lexeme      (string-append lexeme (string char)))
-                                                              (set! last-token  (list next-state lexeme linum colnum))
-                                                              (set! fp-offset   0)
-                                                              (set! colnum      (+ colnum 1))
-                                                              (read-char fp)
-                                                              (run-dfa dfa next-state (peek-char fp)))
+                 (cond ((member next-state final-states)
+                        ;; treat string literals differently to remove last char and
+                        ;; double apostraphies if they have them.
+                        (cond ((eq? dfa mp-string-lit-dfa)    (list "mp-string-lit"
+                                                                    lexeme
+                                                                    linum
+                                                                    colnum))
+                              (else (set! lexeme            (string-append lexeme (string char)))
+                                    (set! last-token        (list next-state lexeme linum colnum))
+                                    (set! fp-offset         0)
+                                    (set! colnum            (+ colnum 1))
+                                    (read-char fp)
+                                    (run-dfa dfa next-state (peek-char fp)))))
                        
                        (else                                  (set! lexeme      (string-append lexeme (string char)))
                                                               (set! fp-offset   (+ fp-offset 1))
@@ -584,6 +596,18 @@
       (undo reversed))
     token))
 
+
+(define all-tokens '())
+(define (get-all-tokens)
+  (let ((token (get-token)))
+    (cond ((string=? (car token) "mp-eof") '())
+          (else (set! all-tokens (append all-tokens (list token))) 
+                (get-all-tokens)))))
+
+(define (print-all-tokens)
+  (get-all-tokens)
+  (display all-tokens)
+  (display "\n"))
 
 ;;---------------------------------------------------------;;
 ;;                                                         ;;
