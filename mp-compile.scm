@@ -88,7 +88,7 @@
 ;;                                                         ;;
 ;; The following functions are translations of the given   ;;
 ;; micro-pascal grammar in EBNF form. The comments above   ;;
-;; each function show the parse rule in its original form. ;; 
+;; each function show the parse rule in its original form. ;;
 ;;                                                         ;;
 ;; During the program parse, records are added to the set  ;;
 ;; of program symbol tables in the form of a list:         ;;
@@ -112,7 +112,7 @@
 
   ;; write to terminate program
   (write-terminate)
-  
+
   (display-prog)
   (format #t "~%The program has compiled successfully!~%~%"))
 
@@ -122,15 +122,15 @@
   ;-- construct new symbol table (begin scope)
   ;-- this will be the root level scope
   (make-table)
-  
+
   ;-- grammar rule
   (program-heading)
   (expect-token "mp-scolon" (get-token))
   (block "L0")
-  
+
   ;-- pop the symbol table (end of scope)
   (pop-table)
-  
+
   ;-- finish grammar rule
   (expect-token "mp-period" (get-token)))
 
@@ -147,16 +147,16 @@
   (variable-declaration-part)
   (let ((vars (get-current-table)))
     (procedure-and-function-declaration-part)
- 
+
     ;; write label
     (write-label label)
 
     (if (string=? label "L0")
         (write-prepare-main)
         (write-proc-head))
-    
+
     (write-add-var-space vars))
-  
+
   (statement-part)
   ;; cleanup the call
   (write-proc-clean))
@@ -253,7 +253,7 @@
   (pop-table)
   ;-- finish grammar rule
   (expect-token "mp-scolon" (get-token)))
- 
+
 
 ;; <procedure-heading> -> mp-procedure . <procedure-identifier>
 ;;                        . <optional-formal-parameter-list>
@@ -335,7 +335,7 @@
            id-list))))
 
 
-;; <statement-part> -> <compound-statement> 
+;; <statement-part> -> <compound-statement>
 (define (statement-part)
   (compound-statement))
 
@@ -419,7 +419,7 @@
     (read-parameter params)
     (read-parameter-tail params)
     ;; write read code
-    (write-read (car params)))  
+    (write-read (car params)))
   (expect-token "mp-rparen" (get-token)))
 
 
@@ -550,7 +550,7 @@
 
     (write-label-lit loop-label)
     (final-value)
-    (write-push var) 
+    (write-push var)
     (cmp-op)
     (write-jmp-eq end-label)
 
@@ -562,7 +562,7 @@
     (write-push "#1")
     (inc-op)
     (write-pop var)
-    
+
     (write-jmp loop-label)
     (write-label-lit end-label)))
 
@@ -741,8 +741,8 @@
           ((string=? (car next-token) "mp-mod") (operation (lambda () (write-modop))))
           ((string=? (car next-token) "mp-and") (operation (lambda () (write-andop))))
           (else eps))))
-  
-  
+
+
 ;; <multiplying-operator> -> mp-times
 ;;                        -> mp-float-divide
 ;;                        -> mp-div
@@ -801,14 +801,16 @@
            (expect-token "mp-rparen" (get-token )))
           ((string=? (car next-token) "mp-identifier")
            (let ((sym (lookup-symbol (function-identifier))))
-             (write-push (string-join
-                          (list (number->string (cadddr (car sym)))
-                                "("
-                                "D"
-                                (number->string (cadr sym))
-                                ")")
-                          "")))
-           (optional-actual-parameter-list))
+             (if (eq? (cadr sym) "function")
+                (write-call (car sym))
+                (write-push (string-join
+                              (list (number->string (cadddr (car sym)))
+                                    "("
+                                    "D"
+                                    (number->string (cadr sym))
+                                    ")")
+                            ""))))
+             (optional-actual-parameter-list))
           (else (token-error "factor" next-token)
                 (exit)))))
 

@@ -5,7 +5,7 @@ var i, sum: integer;
 
 procedure count( n: integer; var sum: integer );
 var i : integer; { local variable }
-begin 
+begin
    i := 1;
    sum := 0;
    while ( i <= n ) do { set-up the loop }
@@ -17,7 +17,7 @@ end;
 
 begin
    readln(i); { get i }
-   count(i, sum); { call count} 
+   count(i, sum); { call count}
    write(sum); { write result }
-   writeln;
+   writeln('');
 end.
