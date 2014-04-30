@@ -179,7 +179,7 @@
 ;;                             -> eps
 (define (variable-declaration-tail)
   (cond ((string=? (car (peek-token)) "mp-identifier")
-         (get-token)
+         ;(get-token)
          (variable-declaration)
          (expect-token "mp-scolon" (get-token))
          (variable-declaration-tail))
@@ -677,10 +677,10 @@
         (set! is-neg #t)
         '())
     (term)
-    (term-tail)
     (if (eq? is-neg #t)
         (write-negop)
-        '())))
+        '())
+    (term-tail)))
 
 
 ;; <term-tail> -> <adding-operator> . <term> . <term-tail>

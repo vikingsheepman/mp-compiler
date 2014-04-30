@@ -254,7 +254,7 @@
     (list
      '("and"        "mp-and")
      '("begin"      "mp-begin")
-     '("Boolean"    "mp-boolean")
+     '("boolean"    "mp-boolean")
      '("div"        "mp-div")
      '("do"         "mp-do")
      '("downto"     "mp-downto")
@@ -481,9 +481,14 @@
    ((string-match "[a-zA-Z]"  (string next-char))
     (let ((id-found (run-dfa mp-letter-start-dfa "q0" next-char)))
       (cond ((string=? (car id-found) "word")
-             (list
-              (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
-              (cadr id-found) (caddr id-found) (cadddr id-found)))
+             (let ((res (list
+              		    (hash-ref mp-keyword-table (string-downcase (cadr id-found)) '"mp-identifier")
+              	        (cadr id-found) (caddr id-found) (cadddr id-found))))
+		(cond ((string=? (car res) "mp-true")
+	       		  (list (car res) "1" (caddr res) (cadddr res)))
+	 	      ((string=? (car res) "mp-false")
+			  (list (car res) "0" (caddr res) (cadddr res)))
+		      (else res))))
             ((string=? (car id-found) "uscore")
              (list "mp-identifier" (cadr id-found) (caddr id-found) (cadddr id-found)))
             (else id-found))))
