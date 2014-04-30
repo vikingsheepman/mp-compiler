@@ -3,20 +3,36 @@ var I,N : integer;
       
 procedure Fred(A: integer; var B: integer);
 var j : integer;
+
+   function Max(A :integer):integer;
+   var i,result : integer;
+   begin
+      i := 5;
+      if (i > A) then
+         result := i
+      else
+         result := A;
+      Max := result;
+   end;
+
 begin 
    A := 10;       
 
-   if (A = 10) and (I > 5) then
-      writeln('A is >= to 10')
+   if (A > 10) and (A < 15) then
+      writeln('10 < A < 15')
    else
-      writeln('statement was false');
+      writeln('A <= 10 or A >= 15');
 
+   write('Enter value for A >> ');
+   readln(A);
    while (A > 5) do
    begin
+      write('A > 5');
       write('Enter value for A >> ');
       readln(A);
       writeln('');
    end;
+   writeln('A <= 5');
    
    B := 2; 
    for j := 0 to 10 do
@@ -32,7 +48,11 @@ begin
       B := B - j;
    end;
    writeln('B = ',B,'\n');
-      
+   
+   B := 7;
+   A := Max(B);
+   writeln('the max of ',B,' and 5 is ',A,'\n');
+   
    I := (I+A)*B;
    write('the procedure''s result is: ',I,' ',A,' ',B,'\n');     
 end;

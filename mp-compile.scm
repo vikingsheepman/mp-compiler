@@ -6,7 +6,7 @@
 ;; CSCI-468 Compilers Project                              ;;
 ;; Phase 2: Parser / Driver                                ;;
 ;;                                                         ;;
-;; Last Modified: 2014-04-08                               ;;
+;; Last Modified: 2014-04-25                               ;;
 ;;                                                         ;;
 ;; Author: Killian Smith                                   ;;
 ;;                                                         ;;
@@ -228,6 +228,7 @@
           ((string=? (car next-token) "mp-function")
            (get-token)
            (function-declaration)
+           (write-return)
            (procedure-and-function-declaration-part))
           (else eps))))
 
@@ -245,17 +246,14 @@
 
 ;; <function-declaration> -> <function-heading> . mp-scolon . <block> . mp-colon
 (define (function-declaration)
-  ;-- construct new symbol table (begin scope)
-  (make-table)
-  ;-- grammar rule
-  (function-heading)
-  (expect-token "mp-scolon" (get-token))
-  (block)
+  (let ((fun (function-heading)))
+    (expect-token "mp-scolon" (get-token))
+    (block fun))
   ;-- pop the symbol table (end of scope)
   (pop-table)
   ;-- finish grammar rule
   (expect-token "mp-scolon" (get-token)))
-
+ 
 
 ;; <procedure-heading> -> mp-procedure . <procedure-identifier>
 ;;                        . <optional-formal-parameter-list>
@@ -271,10 +269,13 @@
 ;;                       . <optional-formal-parameter-list>
 ;;                       . mp-colon . <type>
 (define (function-heading)
-  (function-identifier)
-  (optional-formal-parameter-list)
-  (expect-token "mp-colon" (get-token))
-  (type))
+  (let ((fun (function-identifier)))
+    (insert-fun (list fun "function" ""))
+    (make-table)
+    (optional-formal-parameter-list)
+    (expect-token "mp-colon" (get-token))
+    (insert-fun-ret (list fun "ret" (type) -3))
+    fun))
 
 
 ;; <optional-formal-parameter-list> -> mp-lparen . <formal-parameter-section>

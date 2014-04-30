@@ -29,12 +29,14 @@
             write-il-file
             display-prog
             get-current-table
-            
+             
             ;; symbol table functions
             make-table
             pop-table
             insert-symbol
             insert-proc
+            insert-fun
+            insert-fun-ret
             lookup-symbol
 
             ;; semantic functions
@@ -47,10 +49,13 @@
             write-label
             write-label-lit
             write-proc-setup
+            write-fun-setup
             write-call
             write-proc-head
             write-proc-clean
+            write-fun-clean
             write-return
+            write-fun-return
             
             write-read
             write-write
@@ -155,6 +160,11 @@
           (cons (cons (append symbol (list offset)) current-table) (cdr table-list))))
   (set! offset (+ offset (assoc-ref type-size (caddr symbol)))))
 
+(define (insert-fun-ret symbol)
+  (let ((current-table (car table-list)))
+    (set! table-list
+          (cons (cons symbol current-table) (cdr table-list)))))
+
 (define (insert-proc proc)
   (let ((current-table (car table-list)))
     (set! table-list
@@ -162,6 +172,18 @@
            (cons
             (append
              (append proc
+                     (list -1 -1))
+             (list (get-label)))
+            current-table)
+           (cdr table-list)))))
+
+(define (insert-fun fun)
+  (let ((current-table (car table-list)))
+    (set! table-list
+          (cons
+           (cons
+            (append
+             (append fun
                      (list -1 -1))
              (list (get-label)))
             current-table)
@@ -184,8 +206,9 @@
         (cond ((eq? (cdr table) '())
                (if (eq? symbol-found '())
                    (begin
-                     (format #t "~%symbol '~a' is undeclared~%" symbol)
-                     '())
+                     (format #t "symbol '~a' is undeclared~%~%" symbol)
+                     (format #t "compile failed~%")
+                     (exit))
                    symbol-found))
               (else
                (if (eq? symbol-found '())
@@ -194,6 +217,41 @@
                      (_lookup-symbol symbol (cdr table)))
                    symbol-found))))))
   (_lookup-symbol symbol table-list))
+
+(define (lookup-symbol-proc-or-fun symbol)
+  (define level (- (length table-list) 1))
+  (define (find val lst)
+    (cond ((eq? (cdr lst) '())
+           (if (string=? (caar lst) val)
+               (list (car lst) level)
+               '()))
+          (else
+           (if (string=? (caar lst) val)
+               (list (car lst) level)
+               (find val (cdr lst))))))
+  (define (_lookup-symbol symbol table)
+    (let ((current-table (car table)))
+      (let ((symbol-found (find symbol current-table)))
+        (cond ((eq? (cdr table) '())
+               (if (eq? symbol-found '())
+                   (begin
+                     (format #t "symbol '~a' is undeclared~%~%" symbol)
+                     (format #t "compile failed~%")
+                     (exit))
+                   symbol-found))
+              (else
+               (if (eq? symbol-found '())
+                   (begin
+                     (set! level (- level 1))
+                     (_lookup-symbol symbol (cdr table)))
+                   symbol-found))))))
+  (_lookup-symbol symbol
+                  (delete '()
+                          (map (lambda (lst)
+                                 (filter (lambda (x)
+                                           (or (string=? (cadr x) "procedure")
+                                               (string=? (cadr x) "function")))
+                                         lst)) table-list))))
 
 ;; return symbol offset
 (define (get-offset symbol)
@@ -229,7 +287,7 @@
 ;; get location of symbol
 (define (get-sym-reg sym)
   (string-join (list "D"
-                     (number->string (lookup-symbol)))
+                     (number->string (lookup-symbol sym)))
                ""))
 
 ;; add an instruction to the program
@@ -373,9 +431,18 @@
                       " SP SP")
                 "")))
 
-;; define steps to setup a call
+;; define steps to setup a procedure call
 (define (write-proc-setup)
   (addprog "add #2 SP SP")
+  (addprog (list "mov"
+                 (get-reg+1)
+                 "-1(SP)"))
+  (addprog (list "mov SP"
+                 (get-reg+1))))
+
+;; define steps to setup a function call
+(define (write-fun-setup)
+  (addprog "add #3 SP SP")
   (addprog (list "mov"
                  (get-reg+1)
                  "-1(SP)"))
@@ -389,18 +456,19 @@
   (addprog "mov SP D0"))
          
 ;; define what should hapen at
-;; begining of function call
+;; begining of procedure call
 (define (write-proc-head)
   (addprog (string-append "pop "
                           (string-join (list "-2("
                                              (get-cur-reg)
                                              ")") ""))))
 
+
 ;; write a label from variable
 (define (write-label proc)
   (if (string=? proc "L0")
       (addprog "L0:")
-      (addprog (string-append (list-ref (car (lookup-symbol proc)) 5)
+      (addprog (string-append (list-ref (car (lookup-symbol-proc-or-fun proc)) 5)
                               ":"))))
 
 ;; write a label
@@ -422,7 +490,7 @@
 ;; write call
 (define (write-call proc)
   (addprog (string-append "call "
-                          (list-ref (car (lookup-symbol proc)) 5))))
+                          (list-ref (car (lookup-symbol-proc-or-fun proc)) 5))))
 
 
 ;; write branch if equal
