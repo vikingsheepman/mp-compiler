@@ -1,6 +1,6 @@
 program program2;
 var I,N : integer;
-      
+
 procedure Fred(A: integer; var B: integer);
 var j : integer;
 
@@ -15,8 +15,8 @@ var j : integer;
       Max := result;
    end;
 
-begin 
-   A := 10;       
+begin
+   A := 10;
 
    if (A > 10) and (A < 15) then
       writeln('10 < A < 15')
@@ -33,8 +33,8 @@ begin
       writeln('');
    end;
    writeln('A <= 5');
-   
-   B := 2; 
+
+   B := 2;
    for j := 0 to 10 do
    begin
       writeln(j);
@@ -48,21 +48,21 @@ begin
       B := B - j;
    end;
    writeln('B = ',B,'\n');
-   
-   B := 7;
+
+   B := 4;
    A := Max(B);
    writeln('the max of ',B,' and 5 is ',A,'\n');
-   
+
    I := (I+A)*B;
-   write('the procedure''s result is: ',I,' ',A,' ',B,'\n');     
+   write('the procedure''s result is: ',I,' ',A,' ',B,'\n');
 end;
-      
+
 begin
    write('Enter a number >> ');
    readln(I);
    writeln('Results:');
-   N := 1;     
-   write(I,' ',N,'\n');     
-   Fred(I,N);     
-   write(I,' ',N,'\n')   
+   N := 1;
+   write(I,' ',N,'\n');
+   Fred(I,N);
+   write(I,' ',N,'\n')
 end.

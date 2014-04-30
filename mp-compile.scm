@@ -801,16 +801,18 @@
            (expect-token "mp-rparen" (get-token )))
           ((string=? (car next-token) "mp-identifier")
            (let ((sym (lookup-symbol (function-identifier))))
-             (if (eq? (cadr sym) "function")
-                (write-call (car sym))
+             (if (string=? (cadr (car sym)) "function")
+                (begin
+                  (write-fun-setup)
+                  (optional-actual-parameter-list)
+                  (write-call (caar sym)))
                 (write-push (string-join
                               (list (number->string (cadddr (car sym)))
                                     "("
                                     "D"
                                     (number->string (cadr sym))
                                     ")")
-                            ""))))
-             (optional-actual-parameter-list))
+                            "")))))
           (else (token-error "factor" next-token)
                 (exit)))))
 
