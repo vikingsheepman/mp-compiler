@@ -331,7 +331,7 @@
     (expect-token "mp-colon" (get-token))
     (let ((var-type (type)))
       (map (lambda (id)
-             (insert-symbol (list id "var" var-type)))
+             (insert-symbol (list id "inout" var-type)))
            id-list))))
 
 
@@ -497,9 +497,12 @@
 ;; <repeat-statement> -> mp-repeat . <statement-sequence> . mp-until
 ;;                       . <boolean-expression>
 (define (repeat-statement)
-  (statement-sequence)
-  (expect-token "mp-until" (get-token))
-  (boolean-expression))
+  (let ((loop-label (get-label)))
+    (write-label-lit loop-label)    
+    (statement-sequence)
+    (expect-token "mp-until" (get-token))    
+    (boolean-expression)
+    (write-jmp-neq loop-label)))
 
 
 ;; <while-statement> -> mp-while . <boolean-expression> . mp-do . <statement>

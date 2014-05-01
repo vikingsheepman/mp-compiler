@@ -390,10 +390,14 @@
 
 ;; define push
 (define (write-push val)
-  ;(cond ((string=? val "true") (set! val 1))
-  ;      ((string=? val "false" (set! val 0))))
   (addprog (list "push"
                  val)))
+
+;(define (write-push-val sym)
+;  (let ((val (lookup-symbol sym)))
+;    (if (string=? (cadr val) "inout")
+;        ()
+;        ())))
 
 ;; define pop
 (define (write-pop val)

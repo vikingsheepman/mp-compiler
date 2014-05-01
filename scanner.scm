@@ -493,7 +493,11 @@
              (list "mp-identifier" (cadr id-found) (caddr id-found) (cadddr id-found)))
             (else id-found))))
    
-   ((string-match  "[0-9]"  (string next-char))    (run-dfa mp-digit-start-dfa    "q0" next-char))
+   ((string-match  "[0-9]"  (string next-char))
+    (let ((id-found (run-dfa mp-digit-start-dfa "q0" next-char)))
+      (cond ((string=? (car id-found) "mp-fixed-lit")
+             (list "mp-float-lit" (cadr id-found) (caddr id-found) (cadddr id-found)))
+            (else id-found))))
    
    ((string=?      "'"      (string next-char))    (run-dfa mp-string-lit-dfa     "q0" next-char))
    
